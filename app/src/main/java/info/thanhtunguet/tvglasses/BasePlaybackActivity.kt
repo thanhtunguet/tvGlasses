@@ -61,6 +61,9 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
     }
 
     private fun isModeSwitchKey(keyCode: Int): Boolean {
-        return keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        return keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+            keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+            keyCode == KeyEvent.KEYCODE_ENTER ||
+            keyCode == KeyEvent.KEYCODE_DPAD_CENTER
     }
 }
