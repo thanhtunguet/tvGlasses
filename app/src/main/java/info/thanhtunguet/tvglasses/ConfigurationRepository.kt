@@ -6,6 +6,8 @@ import androidx.core.content.edit
 
 private const val PREFERENCES_NAME = "tv_glasses_configuration"
 private const val KEY_RTSP_URL = "rtsp_url"
+private const val KEY_USERNAME = "username"
+private const val KEY_PASSWORD = "password"
 private const val KEY_MODE = "mode"
 
 /**
@@ -20,6 +22,8 @@ class ConfigurationRepository(private val sharedPreferences: SharedPreferences) 
 
         return ConfigurationObject(
             rtspUrl = sharedPreferences.getString(KEY_RTSP_URL, "") ?: "",
+            username = sharedPreferences.getString(KEY_USERNAME, "") ?: "",
+            password = sharedPreferences.getString(KEY_PASSWORD, "") ?: "",
             mode = playbackMode
         )
     }
@@ -27,6 +31,8 @@ class ConfigurationRepository(private val sharedPreferences: SharedPreferences) 
     fun saveConfiguration(configuration: ConfigurationObject) {
         sharedPreferences.edit {
             putString(KEY_RTSP_URL, configuration.rtspUrl)
+            putString(KEY_USERNAME, configuration.username)
+            putString(KEY_PASSWORD, configuration.password)
             putString(KEY_MODE, configuration.mode.name)
         }
     }
@@ -34,6 +40,18 @@ class ConfigurationRepository(private val sharedPreferences: SharedPreferences) 
     fun updateRtspUrl(rtspUrl: String) {
         sharedPreferences.edit {
             putString(KEY_RTSP_URL, rtspUrl)
+        }
+    }
+
+    fun updateUsername(username: String) {
+        sharedPreferences.edit {
+            putString(KEY_USERNAME, username)
+        }
+    }
+
+    fun updatePassword(password: String) {
+        sharedPreferences.edit {
+            putString(KEY_PASSWORD, password)
         }
     }
 

@@ -1,10 +1,12 @@
 package info.thanhtunguet.tvglasses
 
 /**
- * Represents the app's runtime configuration, pairing the RTSP camera source with the active playback mode.
+ * Represents the app's runtime configuration, including camera stream credentials and the active playback mode.
  */
 data class ConfigurationObject(
     val rtspUrl: String = "",
+    val username: String = "",
+    val password: String = "",
     val mode: PlaybackMode = PlaybackMode.CAMERA
 )
 

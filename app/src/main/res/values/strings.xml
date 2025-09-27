@@ -1,3 +1,14 @@
 <resources>
     <string name="app_name">tvGlasses</string>
+    <string name="settings_heading">Playback Configuration</string>
+    <string name="settings_rtsp_hint">RTSP stream URL</string>
+    <string name="settings_username_hint">Stream username (optional)</string>
+    <string name="settings_password_hint">Stream password (optional)</string>
+    <string name="settings_mode_label">Select current mode</string>
+    <string name="mode_camera">Camera</string>
+    <string name="mode_video">Video</string>
+    <string name="button_open_camera">Enter camera view</string>
+    <string name="button_open_video">Enter video view</string>
+    <string name="camera_placeholder">Camera Activity Placeholder</string>
+    <string name="video_placeholder">Video Activity Placeholder</string>
 </resources>
