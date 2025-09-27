@@ -3,6 +3,7 @@ package info.thanhtunguet.tvglasses
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -26,6 +27,13 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
         configuration = repository.loadConfiguration()
         syncModeIfNeeded()
         enterImmersiveMode()
+        
+        // Handle back button press
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                navigateToMainActivity()
+            }
+        })
     }
 
     override fun onResume() {
@@ -55,6 +63,10 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && (event == null || event.repeatCount == 0)) {
+            navigateToMainActivity()
+            return true
+        }
         if (isModeSwitchKey(keyCode) && (event == null || event.repeatCount == 0)) {
             val nextMode = when (mode) {
                 PlaybackMode.CAMERA -> PlaybackMode.VIDEO
@@ -74,6 +86,13 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
             PlaybackMode.VIDEO -> VideoActivity::class.java
         }
         startActivity(Intent(this, destination))
+        finish()
+    }
+
+    private fun navigateToMainActivity() {
+        val intent = Intent(this, MainActivity::class.java)
+        intent.putExtra("returning_from_playback", true)
+        startActivity(intent)
         finish()
     }
 

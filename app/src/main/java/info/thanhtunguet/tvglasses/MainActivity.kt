@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
     private var skipUnlockOnResume: Boolean = false
     private var isUnlocked: Boolean = false
     private var passwordDialog: AlertDialog? = null
+    private var isReturningFromPlayback: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,6 +87,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (savedInstanceState == null) {
+            // Check if we're returning from playback activity
+            val returningFromPlayback = intent.getBooleanExtra("returning_from_playback", false)
+            if (returningFromPlayback) {
+                isReturningFromPlayback = true
+            }
             maybeAutoLaunchPlayback(modeGroup)
         }
     }
@@ -116,6 +122,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun maybeAutoLaunchPlayback(modeGroup: RadioGroup) {
         if (!hasValidConfiguration()) {
+            return
+        }
+        if (isReturningFromPlayback) {
+            isReturningFromPlayback = false
             return
         }
         skipUnlockOnResume = true
