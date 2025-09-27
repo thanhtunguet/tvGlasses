@@ -1,6 +1,7 @@
 package info.thanhtunguet.tvglasses
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.RadioGroup
 import androidx.appcompat.app.AlertDialog
@@ -34,7 +35,13 @@ class MainActivity : AppCompatActivity() {
         val cameraButton = findViewById<MaterialButton>(R.id.buttonOpenCamera)
         val videoButton = findViewById<MaterialButton>(R.id.buttonOpenVideo)
 
-        rtspField.setText(currentConfiguration.rtspUrl)
+        // Display URL with credentials for better UX
+        val displayUrl = buildUrlWithCredentials(
+            currentConfiguration.rtspUrl,
+            currentConfiguration.username,
+            currentConfiguration.password
+        )
+        rtspField.setText(displayUrl)
         usernameField.setText(currentConfiguration.username)
         passwordField.setText(currentConfiguration.password)
 
@@ -46,8 +53,25 @@ class MainActivity : AppCompatActivity() {
         rtspField.doAfterTextChanged { text ->
             val updatedUrl = text?.toString().orEmpty()
             if (updatedUrl != currentConfiguration.rtspUrl) {
-                currentConfiguration = currentConfiguration.copy(rtspUrl = updatedUrl)
+                // Parse credentials from URL and update fields
+                val (parsedUsername, parsedPassword) = parseUrlCredentials(updatedUrl)
+                val cleanUrl = removeCredentialsFromUrl(updatedUrl)
+                
+                // Update configuration with clean URL and parsed credentials
+                currentConfiguration = currentConfiguration.copy(
+                    rtspUrl = cleanUrl,
+                    username = parsedUsername,
+                    password = parsedPassword
+                )
                 repository.saveConfiguration(currentConfiguration)
+                
+                // Update UI fields without triggering their change listeners
+                if (usernameField.text?.toString() != parsedUsername) {
+                    usernameField.setText(parsedUsername)
+                }
+                if (passwordField.text?.toString() != parsedPassword) {
+                    passwordField.setText(parsedPassword)
+                }
             }
         }
 
@@ -56,6 +80,9 @@ class MainActivity : AppCompatActivity() {
             if (updatedUsername != currentConfiguration.username) {
                 currentConfiguration = currentConfiguration.copy(username = updatedUsername)
                 repository.saveConfiguration(currentConfiguration)
+                
+                // Update RTSP URL display with new credentials
+                updateUrlDisplay(rtspField)
             }
         }
 
@@ -64,6 +91,9 @@ class MainActivity : AppCompatActivity() {
             if (updatedPassword != currentConfiguration.password) {
                 currentConfiguration = currentConfiguration.copy(password = updatedPassword)
                 repository.saveConfiguration(currentConfiguration)
+                
+                // Update RTSP URL display with new credentials
+                updateUrlDisplay(rtspField)
             }
         }
 
@@ -118,6 +148,116 @@ class MainActivity : AppCompatActivity() {
         passwordDialog?.dismiss()
         passwordDialog = null
         super.onDestroy()
+    }
+
+    private fun parseUrlCredentials(url: String): Pair<String, String> {
+        if (url.isBlank()) return Pair("", "")
+        
+        try {
+            var uri = Uri.parse(url.trim())
+            
+            // Handle URLs without scheme
+            if (uri.scheme.isNullOrBlank()) {
+                uri = Uri.parse("rtsp://$url")
+            }
+            
+            val userInfo = uri.userInfo
+            if (userInfo.isNullOrBlank()) {
+                return Pair("", "")
+            }
+            
+            val parts = userInfo.split(":", limit = 2)
+            val username = parts.getOrElse(0) { "" }
+            val password = parts.getOrElse(1) { "" }
+            
+            return Pair(username, password)
+        } catch (e: Exception) {
+            return Pair("", "")
+        }
+    }
+    
+    private fun removeCredentialsFromUrl(url: String): String {
+        if (url.isBlank()) return url
+        
+        try {
+            var uri = Uri.parse(url.trim())
+            
+            // Handle URLs without scheme
+            val hadNoScheme = uri.scheme.isNullOrBlank()
+            if (hadNoScheme) {
+                uri = Uri.parse("rtsp://$url")
+            }
+            
+            if (uri.userInfo.isNullOrBlank()) {
+                return url // No credentials to remove
+            }
+            
+            val authority = uri.authority ?: return url
+            val sanitizedAuthority = authority.substringAfter('@')
+            
+            val cleanUri = uri.buildUpon()
+                .encodedAuthority(sanitizedAuthority)
+                .build()
+            
+            val result = cleanUri.toString()
+            return if (hadNoScheme) {
+                result.removePrefix("rtsp://")
+            } else {
+                result
+            }
+        } catch (e: Exception) {
+            return url
+        }
+    }
+    
+    private fun updateUrlDisplay(rtspField: TextInputEditText) {
+        val displayUrl = buildUrlWithCredentials(
+            currentConfiguration.rtspUrl,
+            currentConfiguration.username,
+            currentConfiguration.password
+        )
+        if (rtspField.text?.toString() != displayUrl) {
+            rtspField.setText(displayUrl)
+        }
+    }
+    
+    private fun buildUrlWithCredentials(baseUrl: String, username: String, password: String): String {
+        if (baseUrl.isBlank()) return baseUrl
+        if (username.isBlank() && password.isBlank()) return baseUrl
+        
+        try {
+            var uri = Uri.parse(baseUrl.trim())
+            
+            // Handle URLs without scheme
+            val hadNoScheme = uri.scheme.isNullOrBlank()
+            if (hadNoScheme) {
+                uri = Uri.parse("rtsp://$baseUrl")
+            }
+            
+            val authority = uri.authority ?: return baseUrl
+            val sanitizedAuthority = authority.substringAfter('@')
+            
+            val userInfo = buildString {
+                append(username)
+                if (password.isNotEmpty()) {
+                    append(":")
+                    append(password)
+                }
+            }
+            
+            val newUri = uri.buildUpon()
+                .encodedAuthority("$userInfo@$sanitizedAuthority")
+                .build()
+            
+            val result = newUri.toString()
+            return if (hadNoScheme) {
+                result.removePrefix("rtsp://")
+            } else {
+                result
+            }
+        } catch (e: Exception) {
+            return baseUrl
+        }
     }
 
     private fun maybeAutoLaunchPlayback(modeGroup: RadioGroup) {
