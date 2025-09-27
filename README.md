@@ -2,6 +2,8 @@
 
 Android app for smart glasses with two playback modes:
 
+Designed to run on any Android device by adapting to any display resolution or aspect ratio.
+
 - Camera mode: Fullscreen RTSP stream
 - Video mode: Local `.mp4` playback with optional Google Drive sync
 
@@ -10,7 +12,6 @@ Android app for smart glasses with two playback modes:
 ### Camera mode
 
 - Display a single RTSP camera stream in fullscreen.
-- Support 16:9 and 4:3 external displays.
 - Use "cover" scaling: maintain aspect ratio and center-crop as needed to avoid black bars.
 - Keep the stream running continuously; auto-reconnect on transient network errors.
 - Show a lightweight error overlay if the stream cannot be started (e.g., invalid URL, no network).
@@ -25,6 +26,7 @@ Android app for smart glasses with two playback modes:
 ## Non-functional requirements
 
 - Start quickly; UI remains responsive during scans and syncs.
+- Adapt responsively to any Android device resolution or aspect ratio, ensuring a consistent experience across phones, tablets, and glasses displays.
 - Handle missing permissions gracefully with clear prompts.
 - Operate reliably in intermittent connectivity scenarios (especially for Camera mode reconnects).
 - Minimal, distraction-free UI suitable for glasses displays.
@@ -39,12 +41,12 @@ Android app for smart glasses with two playback modes:
 ## Assumptions
 
 - Device supports hardware decoding for common `.mp4` content; unsupported files will be skipped without breaking the UI or process
-- External display may be 16:9 or 4:3; scaling uses cover to avoid letterboxing.
+- Scaling uses cover to avoid letterboxing.
 - "Flash storage" refers to internal shared storage and/or attached USB mass storage.
 
 ## Acceptance criteria
 
-- Camera mode shows the RTSP stream fullscreen, without black bars on 16:9 and 4:3 displays.
+- Camera mode shows the RTSP stream fullscreen, without black bars on any display aspect ratio (phones, tablets, or external screens).
 - Camera mode automatically attempts to reconnect after a transient drop and surfaces failures.
 - Video mode finds `.mp4` files on local storage only
 - Detect USB device and trigger auto-syncing
