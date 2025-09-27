@@ -32,8 +32,7 @@ class MainActivity : AppCompatActivity() {
         val usernameField = findViewById<TextInputEditText>(R.id.editUsername)
         val passwordField = findViewById<TextInputEditText>(R.id.editPassword)
         val modeGroup = findViewById<RadioGroup>(R.id.radioModeGroup)
-        val cameraButton = findViewById<MaterialButton>(R.id.buttonOpenCamera)
-        val videoButton = findViewById<MaterialButton>(R.id.buttonOpenVideo)
+        val openViewButton = findViewById<MaterialButton>(R.id.buttonOpenView)
 
         // Display URL with credentials for better UX
         val displayUrl = buildUrlWithCredentials(
@@ -108,12 +107,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        cameraButton.setOnClickListener {
-            openPlayback(PlaybackMode.CAMERA, modeGroup)
-        }
-
-        videoButton.setOnClickListener {
-            openPlayback(PlaybackMode.VIDEO, modeGroup)
+        openViewButton.setOnClickListener {
+            openPlayback(currentConfiguration.mode, modeGroup)
         }
 
         if (savedInstanceState == null) {

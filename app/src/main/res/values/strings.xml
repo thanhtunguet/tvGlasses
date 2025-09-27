@@ -9,6 +9,7 @@
     <string name="mode_video">Video</string>
     <string name="button_open_camera">Enter camera view</string>
     <string name="button_open_video">Enter video view</string>
+    <string name="button_open_view">Open View Mode</string>
     <string name="camera_placeholder">Camera Activity Placeholder</string>
     <string name="camera_missing_stream">Configure a valid RTSP URL to start streaming.</string>
     <string name="password_set_title">Create access password</string>
