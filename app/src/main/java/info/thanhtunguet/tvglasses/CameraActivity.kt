@@ -13,84 +13,56 @@ class CameraActivity : BasePlaybackActivity() {
 
     override val mode: PlaybackMode = PlaybackMode.CAMERA
 
-    private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
+    private lateinit var cameraStreamManager: CameraStreamManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
         playerView = findViewById(R.id.playerView)
+        cameraStreamManager = CameraStreamManager.getInstance(this)
     }
 
     override fun onStart() {
         super.onStart()
-        initializePlayer()
+        attachToStream()
     }
 
     override fun onStop() {
-        releasePlayer()
+        detachFromStream()
         super.onStop()
     }
 
-    private fun initializePlayer() {
-        if (player != null) return
-
-        val streamUri = buildRtspUri(configuration)
-        if (streamUri == null) {
+    private fun attachToStream() {
+        // Ensure the stream manager has the latest configuration
+        cameraStreamManager.updateConfiguration(configuration)
+        
+        // Check if we have a valid configuration
+        if (!cameraStreamManager.hasValidConfiguration()) {
             Toast.makeText(this, R.string.camera_missing_stream, Toast.LENGTH_SHORT).show()
             return
         }
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(streamUri)
-            .setMimeType(MimeTypes.APPLICATION_RTSP)
-            .build()
-
-        val mediaSource = RtspMediaSource.Factory()
-            .setForceUseRtpTcp(true)
-            .createMediaSource(mediaItem)
-
-        val exoPlayer = ExoPlayer.Builder(this).build()
-        exoPlayer.setMediaSource(mediaSource)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
-
-        playerView.player = exoPlayer
-        player = exoPlayer
-    }
-
-    private fun releasePlayer() {
-        playerView.player = null
-        player?.release()
-        player = null
-    }
-
-    private fun buildRtspUri(config: ConfigurationObject): Uri? {
-        val rawUrl = config.rtspUrl.trim()
-        if (rawUrl.isEmpty()) return null
-
-        var uri = Uri.parse(rawUrl)
-        if (uri.scheme.isNullOrBlank()) {
-            uri = Uri.parse("rtsp://$rawUrl")
+        
+        // Attach the player view to the stream manager
+        cameraStreamManager.attachToPlayerView(playerView)
+        
+        // Show a message if the stream is not ready yet
+        if (!cameraStreamManager.isStreamReady()) {
+            Toast.makeText(this, "Connecting to camera stream...", Toast.LENGTH_SHORT).show()
         }
-
-        val hasProvidedCredentials = config.username.isNotBlank() || config.password.isNotBlank()
-        val userInfoAlreadyPresent = !uri.userInfo.isNullOrBlank()
-        if (hasProvidedCredentials && !userInfoAlreadyPresent) {
-            val authority = uri.authority ?: return uri
-            val sanitizedAuthority = authority.substringAfter('@')
-            val userInfo = buildString {
-                append(config.username)
-                if (config.password.isNotEmpty()) {
-                    append(":")
-                    append(config.password)
-                }
-            }
-            uri = uri.buildUpon()
-                .encodedAuthority("$userInfo@$sanitizedAuthority")
-                .build()
+    }
+    
+    private fun detachFromStream() {
+        cameraStreamManager.detachFromPlayerView(playerView)
+    }
+    
+    override fun onConfigurationChanged() {
+        // Update the stream manager with the new configuration
+        cameraStreamManager.updateConfiguration(configuration)
+        
+        // Check if we still have a valid configuration
+        if (!cameraStreamManager.hasValidConfiguration()) {
+            Toast.makeText(this, R.string.camera_missing_stream, Toast.LENGTH_SHORT).show()
         }
-
-        return uri
     }
 }

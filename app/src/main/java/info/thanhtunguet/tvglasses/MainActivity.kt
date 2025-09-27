@@ -21,6 +21,7 @@ import com.google.android.material.textfield.TextInputLayout
 class MainActivity : AppCompatActivity() {
 
     private lateinit var repository: ConfigurationRepository
+    private lateinit var cameraStreamManager: CameraStreamManager
     private var currentConfiguration: ConfigurationObject = ConfigurationObject()
     private var skipUnlockOnResume: Boolean = false
     private var isUnlocked: Boolean = false
@@ -53,6 +54,7 @@ class MainActivity : AppCompatActivity() {
 
         repository = ConfigurationRepository.create(applicationContext)
         currentConfiguration = repository.loadConfiguration()
+        cameraStreamManager = CameraStreamManager.getInstance(this)
 
         val rtspField = findViewById<TextInputEditText>(R.id.editRtspUrl)
         val usernameField = findViewById<TextInputEditText>(R.id.editUsername)
@@ -91,6 +93,9 @@ class MainActivity : AppCompatActivity() {
                 )
                 repository.saveConfiguration(currentConfiguration)
                 
+                // Update camera stream manager with new configuration
+                updateCameraStream()
+                
                 // Update UI fields without triggering their change listeners
                 if (usernameField.text?.toString() != parsedUsername) {
                     usernameField.setText(parsedUsername)
@@ -107,6 +112,9 @@ class MainActivity : AppCompatActivity() {
                 currentConfiguration = currentConfiguration.copy(username = updatedUsername)
                 repository.saveConfiguration(currentConfiguration)
                 
+                // Update camera stream manager with new configuration
+                updateCameraStream()
+                
                 // Update RTSP URL display with new credentials
                 updateUrlDisplay(rtspField)
             }
@@ -117,6 +125,9 @@ class MainActivity : AppCompatActivity() {
             if (updatedPassword != currentConfiguration.password) {
                 currentConfiguration = currentConfiguration.copy(password = updatedPassword)
                 repository.saveConfiguration(currentConfiguration)
+                
+                // Update camera stream manager with new configuration
+                updateCameraStream()
                 
                 // Update RTSP URL display with new credentials
                 updateUrlDisplay(rtspField)
@@ -141,6 +152,9 @@ class MainActivity : AppCompatActivity() {
         openAppsButton.setOnClickListener {
             startActivity(Intent(this, AppDrawerActivity::class.java))
         }
+        
+        // Initialize camera stream if configuration is valid
+        updateCameraStream()
 
         if (savedInstanceState == null) {
             // Check if we're returning from playback activity
@@ -180,6 +194,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         passwordDialog?.dismiss()
         passwordDialog = null
+        // Stop camera stream when app is destroyed
+        cameraStreamManager.stopMaintainingConnection()
         super.onDestroy()
     }
 
@@ -468,6 +484,8 @@ class MainActivity : AppCompatActivity() {
     private fun onPermissionsGranted() {
         // Permissions granted, now check if we should prompt for default launcher
         promptForDefaultLauncher()
+        // Also ensure camera stream is started if we have valid configuration
+        updateCameraStream()
     }
     
     private fun showPermissionDeniedDialog() {
@@ -529,4 +547,20 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
     }
+    
+    private fun updateCameraStream() {
+        if (hasValidCameraConfiguration()) {
+            cameraStreamManager.updateConfiguration(currentConfiguration)
+            if (!cameraStreamManager.hasValidConfiguration()) {
+                cameraStreamManager.startMaintainingConnection(currentConfiguration)
+            }
+        } else {
+            cameraStreamManager.stopMaintainingConnection()
+        }
+    }
+    
+    private fun hasValidCameraConfiguration(): Boolean {
+        return currentConfiguration.rtspUrl.isNotBlank()
+    }
+    
 }

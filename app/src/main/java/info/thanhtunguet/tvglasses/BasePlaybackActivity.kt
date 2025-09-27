@@ -38,9 +38,20 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        configuration = repository.loadConfiguration()
+        val newConfiguration = repository.loadConfiguration()
+        val configChanged = configuration != newConfiguration
+        configuration = newConfiguration
         syncModeIfNeeded()
         enterImmersiveMode()
+        
+        // Notify camera activities about configuration changes
+        if (configChanged && mode == PlaybackMode.CAMERA) {
+            onConfigurationChanged()
+        }
+    }
+    
+    protected open fun onConfigurationChanged() {
+        // Override in activities that need to handle configuration changes
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
