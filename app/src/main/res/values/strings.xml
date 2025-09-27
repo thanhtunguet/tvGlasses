@@ -10,5 +10,6 @@
     <string name="button_open_camera">Enter camera view</string>
     <string name="button_open_video">Enter video view</string>
     <string name="camera_placeholder">Camera Activity Placeholder</string>
+    <string name="camera_missing_stream">Configure a valid RTSP URL to start streaming.</string>
     <string name="video_placeholder">Video Activity Placeholder</string>
 </resources>
