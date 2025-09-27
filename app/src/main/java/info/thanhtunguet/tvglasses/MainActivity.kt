@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.os.Bundle
+import android.widget.ImageButton
 import android.widget.RadioGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -63,6 +64,7 @@ class MainActivity : AppCompatActivity() {
         val openViewButton = findViewById<MaterialButton>(R.id.buttonOpenView)
         val openAppsButton = findViewById<MaterialButton>(R.id.buttonOpenApps)
         val setDefaultLauncherButton = findViewById<MaterialButton>(R.id.buttonSetDefaultLauncher)
+        val systemSettingsButton = findViewById<ImageButton>(R.id.buttonOpenSystemSettings)
 
         // Display URL with credentials for better UX
         val displayUrl = buildUrlWithCredentials(
@@ -167,7 +169,11 @@ class MainActivity : AppCompatActivity() {
                 openLauncherSettings()
             }
         }
-        
+
+        systemSettingsButton.setOnClickListener {
+            openSystemSettings()
+        }
+
         // Initialize camera stream if configuration is valid
         updateCameraStream()
 
@@ -539,6 +545,18 @@ class MainActivity : AppCompatActivity() {
         }
         val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
         return resolveInfo?.activityInfo?.packageName == packageName
+    }
+    
+    private fun openSystemSettings() {
+        val intent = Intent(Settings.ACTION_SETTINGS)
+        if (intent.resolveActivity(packageManager) != null) {
+            startActivity(intent)
+        } else {
+            val appSettingsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+            }
+            startActivity(appSettingsIntent)
+        }
     }
     
     private fun openLauncherSettings() {

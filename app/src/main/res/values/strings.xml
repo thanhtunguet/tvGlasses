@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">tvGlasses</string>
     <string name="settings_heading">Playback Configuration</string>
+    <string name="settings_open_system_settings">Open system settings</string>
     <string name="settings_rtsp_hint">RTSP stream URL</string>
     <string name="settings_username_hint">Stream username (optional)</string>
     <string name="settings_password_hint">Stream password (optional)</string>

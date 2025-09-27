@@ -11,12 +11,30 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <TextView
-            android:id="@+id/textConfigurationHeader"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/settings_heading"
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/textConfigurationHeader"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="@string/settings_heading"
+                android:textAppearance="?attr/textAppearanceHeadline6" />
+
+            <ImageButton
+                android:id="@+id/buttonOpenSystemSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/settings_open_system_settings"
+                android:padding="8dp"
+                android:src="@android:drawable/ic_menu_preferences"
+                android:tint="?attr/colorOnSurface" />
+        </LinearLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -91,29 +109,39 @@
                 android:text="@string/mode_video" />
         </RadioGroup>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/buttonOpenView"
-            style="@style/Widget.MaterialComponents.Button"
+        <LinearLayout
+            android:id="@+id/actionButtonRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="32dp"
-            android:text="@string/button_open_view" />
+            android:orientation="horizontal">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/buttonOpenApps"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/button_open_apps" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonOpenView"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="12dp"
+                android:text="@string/button_open_view" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/buttonSetDefaultLauncher"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/button_set_default_launcher" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonOpenApps"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="12dp"
+                android:text="@string/button_open_apps" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonSetDefaultLauncher"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/button_set_default_launcher" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>
