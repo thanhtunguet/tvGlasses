@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         val modeGroup = findViewById<RadioGroup>(R.id.radioModeGroup)
         val openViewButton = findViewById<MaterialButton>(R.id.buttonOpenView)
         val openAppsButton = findViewById<MaterialButton>(R.id.buttonOpenApps)
+        val setDefaultLauncherButton = findViewById<MaterialButton>(R.id.buttonSetDefaultLauncher)
 
         // Display URL with credentials for better UX
         val displayUrl = buildUrlWithCredentials(
@@ -151,6 +152,20 @@ class MainActivity : AppCompatActivity() {
 
         openAppsButton.setOnClickListener {
             startActivity(Intent(this, AppDrawerActivity::class.java))
+        }
+
+        setDefaultLauncherButton.setOnClickListener {
+            if (isDefaultLauncher()) {
+                // Already set as default launcher
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Already Default")
+                    .setMessage("tvGlasses is already set as your default launcher.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else {
+                // Open launcher settings
+                openLauncherSettings()
+            }
         }
         
         // Initialize camera stream if configuration is valid
