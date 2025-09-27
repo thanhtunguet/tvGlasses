@@ -325,6 +325,10 @@ class MainActivity : AppCompatActivity() {
         dialog.setCanceledOnTouchOutside(false)
         dialog.setOnDismissListener { passwordDialog = null }
         dialog.show()
+        
+        // Autofocus on the new password field
+        newPasswordField.requestFocus()
+        
         passwordDialog = dialog
     }
 
@@ -361,6 +365,10 @@ class MainActivity : AppCompatActivity() {
         dialog.setCanceledOnTouchOutside(false)
         dialog.setOnDismissListener { passwordDialog = null }
         dialog.show()
+        
+        // Autofocus on the password field
+        passwordField.requestFocus()
+        
         passwordDialog = dialog
     }
 
