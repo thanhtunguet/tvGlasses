@@ -28,11 +28,13 @@
 
         <activity
             android:name=".CameraActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.TvGlasses.Playback" />
 
         <activity
             android:name=".VideoActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.TvGlasses.Playback" />
 
         <activity
             android:name=".MainActivity"

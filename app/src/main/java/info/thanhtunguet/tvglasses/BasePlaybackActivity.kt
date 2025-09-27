@@ -4,6 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * Provides common behaviour for playback screens, including handling of hardware key events
@@ -22,12 +25,33 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
         repository = ConfigurationRepository.create(applicationContext)
         configuration = repository.loadConfiguration()
         syncModeIfNeeded()
+        enterImmersiveMode()
     }
 
     override fun onResume() {
         super.onResume()
         configuration = repository.loadConfiguration()
         syncModeIfNeeded()
+        enterImmersiveMode()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemBars()
+        }
+    }
+
+    private fun enterImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
