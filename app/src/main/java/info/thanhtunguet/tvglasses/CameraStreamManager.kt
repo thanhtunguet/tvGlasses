@@ -20,7 +20,6 @@ class CameraStreamManager private constructor(private val context: Context) {
     companion object {
         private const val TAG = "CameraStreamManager"
         private const val RECONNECT_DELAY_MS = 3000L
-        private const val MAX_RECONNECT_ATTEMPTS = 5
         
         @Volatile
         private var INSTANCE: CameraStreamManager? = null
@@ -74,6 +73,7 @@ class CameraStreamManager private constructor(private val context: Context) {
         shouldMaintainConnection = false
         handler.removeCallbacks(reconnectRunnable)
         releasePlayer()
+        reconnectAttempts = 0
     }
     
     fun updateConfiguration(config: ConfigurationObject) {
@@ -129,14 +129,9 @@ class CameraStreamManager private constructor(private val context: Context) {
             return
         }
         
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            Log.w(TAG, "Max reconnection attempts reached")
-            return
-        }
-        
         isConnecting.set(true)
         reconnectAttempts++
-        
+
         Log.d(TAG, "Attempting to connect to stream (attempt $reconnectAttempts)")
         
         // Release existing player
@@ -174,13 +169,9 @@ class CameraStreamManager private constructor(private val context: Context) {
         isConnecting.set(false)
         handler.removeCallbacks(reconnectRunnable)
         
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            val delay = RECONNECT_DELAY_MS * reconnectAttempts // Exponential backoff
-            Log.d(TAG, "Scheduling reconnection in ${delay}ms")
-            handler.postDelayed(reconnectRunnable, delay)
-        } else {
-            Log.w(TAG, "Max reconnection attempts reached, stopping reconnection attempts")
-        }
+        val delay = RECONNECT_DELAY_MS
+        Log.d(TAG, "Scheduling reconnection in ${delay}ms")
+        handler.postDelayed(reconnectRunnable, delay)
     }
     
     private fun releasePlayer() {
