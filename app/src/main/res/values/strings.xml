@@ -29,4 +29,7 @@
     <string name="app_icon_description">App icon</string>
     <string name="button_open_apps">Open Apps</string>
     <string name="button_set_default_launcher">Set as Default Launcher</string>
+    <string name="button_manage_videos">Manage Videos</string>
+    <string name="video_playlist_empty">No playable videos found.</string>
+    <string name="video_playlist_error">Could not load videos.</string>
 </resources>

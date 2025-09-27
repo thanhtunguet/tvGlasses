@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity() {
         val openViewButton = findViewById<MaterialButton>(R.id.buttonOpenView)
         val openAppsButton = findViewById<MaterialButton>(R.id.buttonOpenApps)
         val setDefaultLauncherButton = findViewById<MaterialButton>(R.id.buttonSetDefaultLauncher)
+        val manageVideosButton = findViewById<MaterialButton>(R.id.buttonManageVideos)
         val systemSettingsButton = findViewById<ImageButton>(R.id.buttonOpenSystemSettings)
 
         // Display URL with credentials for better UX
@@ -154,6 +155,10 @@ class MainActivity : AppCompatActivity() {
 
         openAppsButton.setOnClickListener {
             startActivity(Intent(this, AppDrawerActivity::class.java))
+        }
+
+        manageVideosButton.setOnClickListener {
+            startActivity(Intent(this, VideoActivity::class.java))
         }
 
         setDefaultLauncherButton.setOnClickListener {
@@ -468,7 +473,7 @@ class MainActivity : AppCompatActivity() {
 
         val destination = when (mode) {
             PlaybackMode.CAMERA -> CameraActivity::class.java
-            PlaybackMode.VIDEO -> VideoActivity::class.java
+            PlaybackMode.VIDEO -> PlayerActivity::class.java
         }
         startActivity(Intent(this, destination))
     }

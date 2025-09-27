@@ -66,6 +66,11 @@
             android:parentActivityName=".VideoActivity"
             android:theme="@style/Theme.TvGlasses.Playback" />
 
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TvGlasses.Playback" />
+
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
