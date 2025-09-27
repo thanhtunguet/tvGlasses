@@ -1,7 +1,13 @@
 package info.thanhtunguet.tvglasses
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.widget.RadioGroup
 import androidx.appcompat.app.AlertDialog
@@ -20,6 +26,26 @@ class MainActivity : AppCompatActivity() {
     private var isUnlocked: Boolean = false
     private var passwordDialog: AlertDialog? = null
     private var isReturningFromPlayback: Boolean = false
+    private var hasRequestedPermissions: Boolean = false
+    private var hasPromptedForLauncher: Boolean = false
+    
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.all { it.value }
+        if (allGranted) {
+            onPermissionsGranted()
+        } else {
+            showPermissionDeniedDialog()
+        }
+    }
+    
+    private val launcherSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // User returned from launcher settings
+        checkIfSetAsDefaultLauncher()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,7 +158,14 @@ class MainActivity : AppCompatActivity() {
             skipUnlockOnResume = false
             return
         }
-        promptForPassword()
+        
+        if (repository.hasAppLockPassword()) {
+            promptForPassword()
+        } else {
+            // No password set, user is automatically unlocked
+            isUnlocked = true
+            checkAndRequestPermissions()
+        }
     }
 
     override fun onPause() {
@@ -322,6 +355,7 @@ class MainActivity : AppCompatActivity() {
                         repository.setAppLockPassword(newPassword)
                         isUnlocked = true
                         dialog.dismiss()
+                        checkAndRequestPermissions()
                     }
                 }
             }
@@ -362,6 +396,7 @@ class MainActivity : AppCompatActivity() {
                     else -> {
                         isUnlocked = true
                         dialog.dismiss()
+                        checkAndRequestPermissions()
                     }
                 }
             }
@@ -396,5 +431,102 @@ class MainActivity : AppCompatActivity() {
             PlaybackMode.VIDEO -> VideoActivity::class.java
         }
         startActivity(Intent(this, destination))
+    }
+    
+    private fun checkAndRequestPermissions() {
+        if (hasRequestedPermissions) return
+        
+        val requiredPermissions = mutableListOf<String>()
+        
+        // Check storage permissions based on Android version
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ - Use granular media permissions
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VIDEO) 
+                != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            }
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) 
+                != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            }
+        } else {
+            // Android 12 and below - Use READ_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) 
+                != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+        
+        if (requiredPermissions.isNotEmpty()) {
+            hasRequestedPermissions = true
+            permissionLauncher.launch(requiredPermissions.toTypedArray())
+        } else {
+            onPermissionsGranted()
+        }
+    }
+    
+    private fun onPermissionsGranted() {
+        // Permissions granted, now check if we should prompt for default launcher
+        promptForDefaultLauncher()
+    }
+    
+    private fun showPermissionDeniedDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Permissions Required")
+            .setMessage("Storage permissions are required for video playback. Please grant permissions in Settings.")
+            .setPositiveButton("Open Settings") { _, _ ->
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+    
+    private fun promptForDefaultLauncher() {
+        if (hasPromptedForLauncher) return
+        if (isDefaultLauncher()) return
+        
+        hasPromptedForLauncher = true
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Set as Default Launcher")
+            .setMessage("Would you like to set tvGlasses as your default launcher? This will make it the home screen that appears when you press the home button.")
+            .setPositiveButton("Set as Default") { _, _ ->
+                openLauncherSettings()
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+    
+    private fun isDefaultLauncher(): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        return resolveInfo?.activityInfo?.packageName == packageName
+    }
+    
+    private fun openLauncherSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_HOME_SETTINGS)
+            launcherSettingsLauncher.launch(intent)
+        } catch (e: Exception) {
+            // Fallback for devices that don't support direct launcher settings
+            val intent = Intent(Settings.ACTION_SETTINGS)
+            startActivity(intent)
+        }
+    }
+    
+    private fun checkIfSetAsDefaultLauncher() {
+        if (isDefaultLauncher()) {
+            // User has set the app as default launcher
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Success!")
+                .setMessage("tvGlasses is now your default launcher.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 }
