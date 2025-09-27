@@ -24,4 +24,7 @@
     <string name="password_dialog_confirm">Continue</string>
     <string name="password_dialog_cancel">Cancel</string>
     <string name="video_placeholder">Video Activity Placeholder</string>
+    <string name="app_drawer_title">Apps</string>
+    <string name="app_icon_description">App icon</string>
+    <string name="button_open_apps">Open Apps</string>
 </resources>

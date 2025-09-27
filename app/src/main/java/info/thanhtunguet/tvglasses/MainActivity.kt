@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
         val passwordField = findViewById<TextInputEditText>(R.id.editPassword)
         val modeGroup = findViewById<RadioGroup>(R.id.radioModeGroup)
         val openViewButton = findViewById<MaterialButton>(R.id.buttonOpenView)
+        val openAppsButton = findViewById<MaterialButton>(R.id.buttonOpenApps)
 
         // Display URL with credentials for better UX
         val displayUrl = buildUrlWithCredentials(
@@ -109,6 +110,10 @@ class MainActivity : AppCompatActivity() {
 
         openViewButton.setOnClickListener {
             openPlayback(currentConfiguration.mode, modeGroup)
+        }
+
+        openAppsButton.setOnClickListener {
+            startActivity(Intent(this, AppDrawerActivity::class.java))
         }
 
         if (savedInstanceState == null) {
