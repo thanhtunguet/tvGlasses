@@ -9,6 +9,7 @@ private const val KEY_RTSP_URL = "rtsp_url"
 private const val KEY_USERNAME = "username"
 private const val KEY_PASSWORD = "password"
 private const val KEY_MODE = "mode"
+private const val KEY_APP_LOCK_PASSWORD = "app_lock_password"
 
 /**
  * Persists and retrieves the [ConfigurationObject] backing the app's camera and video playback experience.
@@ -59,6 +60,23 @@ class ConfigurationRepository(private val sharedPreferences: SharedPreferences) 
         sharedPreferences.edit {
             putString(KEY_MODE, mode.name)
         }
+    }
+
+    fun setAppLockPassword(password: String) {
+        sharedPreferences.edit {
+            putString(KEY_APP_LOCK_PASSWORD, password)
+        }
+    }
+
+    fun getAppLockPassword(): String? {
+        return sharedPreferences.getString(KEY_APP_LOCK_PASSWORD, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun hasAppLockPassword(): Boolean = !getAppLockPassword().isNullOrEmpty()
+
+    fun validateAppLockPassword(candidate: String): Boolean {
+        val stored = getAppLockPassword()
+        return stored != null && stored == candidate
     }
 
     companion object {

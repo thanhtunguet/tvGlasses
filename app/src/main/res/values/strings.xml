@@ -11,5 +11,16 @@
     <string name="button_open_video">Enter video view</string>
     <string name="camera_placeholder">Camera Activity Placeholder</string>
     <string name="camera_missing_stream">Configure a valid RTSP URL to start streaming.</string>
+    <string name="password_set_title">Create access password</string>
+    <string name="password_set_message">Set a password to protect configuration settings.</string>
+    <string name="password_enter_title">Enter access password</string>
+    <string name="password_enter_message">Enter the password to unlock configuration settings.</string>
+    <string name="password_hint">Password</string>
+    <string name="password_confirm_hint">Confirm password</string>
+    <string name="password_error_mismatch">Passwords do not match.</string>
+    <string name="password_error_empty">Password cannot be empty.</string>
+    <string name="password_error_incorrect">Incorrect password. Try again.</string>
+    <string name="password_dialog_confirm">Continue</string>
+    <string name="password_dialog_cancel">Cancel</string>
     <string name="video_placeholder">Video Activity Placeholder</string>
 </resources>
