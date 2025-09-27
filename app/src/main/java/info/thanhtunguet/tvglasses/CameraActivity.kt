@@ -34,11 +34,12 @@ class CameraActivity : BasePlaybackActivity() {
     }
 
     private fun attachToStream() {
-        // Ensure the stream manager has the latest configuration
-        cameraStreamManager.updateConfiguration(configuration)
-        
+        // Start maintaining the stream connection using the latest configuration
+        cameraStreamManager.startMaintainingConnection(configuration)
+
         // Check if we have a valid configuration
         if (!cameraStreamManager.hasValidConfiguration()) {
+            cameraStreamManager.stopMaintainingConnection()
             Toast.makeText(this, R.string.camera_missing_stream, Toast.LENGTH_SHORT).show()
             return
         }
@@ -54,6 +55,7 @@ class CameraActivity : BasePlaybackActivity() {
     
     private fun detachFromStream() {
         cameraStreamManager.detachFromPlayerView(playerView)
+        cameraStreamManager.stopMaintainingConnection()
     }
     
     override fun onConfigurationChanged() {

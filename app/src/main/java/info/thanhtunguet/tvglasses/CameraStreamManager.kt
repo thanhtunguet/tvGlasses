@@ -38,6 +38,7 @@ class CameraStreamManager private constructor(private val context: Context) {
     private var isConnecting = AtomicBoolean(false)
     private var reconnectAttempts = 0
     private var shouldMaintainConnection = false
+    private var attachedPlayerView: PlayerView? = null
     
     private val handler = Handler(Looper.getMainLooper())
     private val reconnectRunnable = Runnable { attemptConnection() }
@@ -65,6 +66,7 @@ class CameraStreamManager private constructor(private val context: Context) {
     
     fun startMaintainingConnection(config: ConfigurationObject) {
         shouldMaintainConnection = true
+        reconnectAttempts = 0
         updateConfiguration(config)
     }
     
@@ -81,11 +83,15 @@ class CameraStreamManager private constructor(private val context: Context) {
         val needsReconnect = currentConfig?.rtspUrl != config.rtspUrl ||
                 currentConfig?.username != config.username ||
                 currentConfig?.password != config.password
-        
+
         currentConfig = config
         currentUri = newUri
-        
-        if (shouldMaintainConnection && newUri != null && needsReconnect) {
+
+        if (needsReconnect) {
+            reconnectAttempts = 0
+        }
+
+        if (shouldMaintainConnection && newUri != null && (needsReconnect || player == null)) {
             attemptConnection()
         } else if (newUri == null) {
             releasePlayer()
@@ -93,16 +99,20 @@ class CameraStreamManager private constructor(private val context: Context) {
     }
     
     fun attachToPlayerView(playerView: PlayerView) {
+        attachedPlayerView = playerView
         playerView.player = player
         // Ensure we have a connection if we should maintain one
         if (shouldMaintainConnection && currentUri != null && player == null) {
             attemptConnection()
         }
     }
-    
+
     fun detachFromPlayerView(playerView: PlayerView) {
         if (playerView.player == player) {
             playerView.player = null
+        }
+        if (attachedPlayerView == playerView) {
+            attachedPlayerView = null
         }
     }
     
@@ -131,7 +141,7 @@ class CameraStreamManager private constructor(private val context: Context) {
         
         // Release existing player
         releasePlayer()
-        
+
         try {
             val mediaItem = MediaItem.Builder()
                 .setUri(currentUri!!)
@@ -139,7 +149,6 @@ class CameraStreamManager private constructor(private val context: Context) {
                 .build()
             
             val mediaSource = RtspMediaSource.Factory()
-                .setForceUseRtpTcp(true)
                 .setTimeoutMs(10000) // 10 second timeout
                 .createMediaSource(mediaItem)
             
@@ -148,9 +157,10 @@ class CameraStreamManager private constructor(private val context: Context) {
             exoPlayer.setMediaSource(mediaSource)
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
-            
+
             player = exoPlayer
-            
+            attachedPlayerView?.player = exoPlayer
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create player", e)
             isConnecting.set(false)
@@ -177,6 +187,11 @@ class CameraStreamManager private constructor(private val context: Context) {
         player?.removeListener(playerListener)
         player?.release()
         player = null
+        attachedPlayerView?.let { view ->
+            if (view.player != null) {
+                view.player = null
+            }
+        }
         isConnecting.set(false)
     }
     
