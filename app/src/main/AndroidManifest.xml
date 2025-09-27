@@ -58,7 +58,7 @@
             android:name=".AppDrawerActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
-            android:theme="@style/Theme.TvGlasses" />
+            android:theme="@style/Theme.TvGlasses.AppDrawer" />
 
         <receiver
             android:name=".BootReceiver"
