@@ -60,6 +60,12 @@
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.TvGlasses.AppDrawer" />
 
+        <activity
+            android:name=".VideoPlayerActivity"
+            android:exported="false"
+            android:parentActivityName=".VideoActivity"
+            android:theme="@style/Theme.TvGlasses.Playback" />
+
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
