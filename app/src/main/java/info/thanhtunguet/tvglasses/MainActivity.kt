@@ -6,10 +6,10 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.widget.ImageButton
+import info.thanhtunguet.tvglasses.UriEncodingUtils
 import android.widget.RadioGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -237,8 +237,8 @@ class MainActivity : AppCompatActivity() {
             }
             
             val parts = userInfo.split(":", limit = 2)
-            val username = parts.getOrElse(0) { "" }
-            val password = parts.getOrElse(1) { "" }
+            val username = Uri.decode(parts.getOrElse(0) { "" })
+            val password = Uri.decode(parts.getOrElse(1) { "" })
             
             return Pair(username, password)
         } catch (e: Exception) {
@@ -306,12 +306,15 @@ class MainActivity : AppCompatActivity() {
             
             val authority = uri.authority ?: return baseUrl
             val sanitizedAuthority = authority.substringAfter('@')
+
+            val encodedUsername = UriEncodingUtils.encodeUserInfoComponent(username)
+            val encodedPassword = UriEncodingUtils.encodeUserInfoComponent(password)
             
             val userInfo = buildString {
-                append(username)
+                append(encodedUsername)
                 if (password.isNotEmpty()) {
                     append(":")
-                    append(password)
+                    append(encodedPassword)
                 }
             }
             

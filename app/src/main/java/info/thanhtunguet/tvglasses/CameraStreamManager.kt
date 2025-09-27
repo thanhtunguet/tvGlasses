@@ -12,6 +12,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.rtsp.RtspMediaSource
 import androidx.media3.ui.PlayerView
+import info.thanhtunguet.tvglasses.UriEncodingUtils
 import java.util.concurrent.atomic.AtomicBoolean
 
 class CameraStreamManager private constructor(private val context: Context) {
@@ -193,11 +194,13 @@ class CameraStreamManager private constructor(private val context: Context) {
         if (hasProvidedCredentials && !userInfoAlreadyPresent) {
             val authority = uri.authority ?: return uri
             val sanitizedAuthority = authority.substringAfter('@')
+            val encodedUsername = UriEncodingUtils.encodeUserInfoComponent(config.username)
+            val encodedPassword = UriEncodingUtils.encodeUserInfoComponent(config.password)
             val userInfo = buildString {
-                append(config.username)
+                append(encodedUsername)
                 if (config.password.isNotEmpty()) {
                     append(":")
-                    append(config.password)
+                    append(encodedPassword)
                 }
             }
             uri = uri.buildUpon()
