@@ -40,7 +40,7 @@
         <activity
             android:name=".VideoActivity"
             android:exported="false"
-            android:theme="@style/Theme.TvGlasses.Playback" />
+            android:theme="@style/Theme.TvGlasses.AppDrawer" />
 
         <activity
             android:name=".MainActivity"

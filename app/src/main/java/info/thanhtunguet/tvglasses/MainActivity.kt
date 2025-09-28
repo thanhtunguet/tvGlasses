@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.os.Bundle
@@ -52,6 +53,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        
+        // Ensure status bar is visible and properly themed
+        setupStatusBar()
 
         repository = ConfigurationRepository.create(applicationContext)
         currentConfiguration = repository.loadConfiguration()
@@ -189,6 +193,19 @@ class MainActivity : AppCompatActivity() {
                 isReturningFromPlayback = true
             }
             maybeAutoLaunchPlayback(modeGroup)
+        }
+    }
+
+    private fun setupStatusBar() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // Make status bar visible with proper color
+            window.statusBarColor = ContextCompat.getColor(this, R.color.purple_700)
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Ensure status bar content is light (white icons/text) on dark background
+            window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and 
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
         }
     }
 
