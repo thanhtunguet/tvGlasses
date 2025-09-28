@@ -1,14 +1,22 @@
 package info.thanhtunguet.tvglasses
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -33,6 +41,30 @@ class VideoActivity : BasePlaybackActivity() {
     private lateinit var videoScanner: VideoFileScanner
     private val selectedVideoPaths = linkedSetOf<String>()
     private var currentVideos: List<VideoFile> = emptyList()
+    
+    private val manageStoragePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                proceedWithPendingDeletion()
+            } else {
+                Toast.makeText(this, "Storage permission is required to delete videos", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private val writeStoragePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            proceedWithPendingDeletion()
+        } else {
+            Toast.makeText(this, "Storage permission is required to delete videos", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    private var pendingDeletionVideos: List<VideoFile>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -203,6 +235,12 @@ class VideoActivity : BasePlaybackActivity() {
     }
 
     private fun performDeletion(targetVideos: List<VideoFile>) {
+        if (!hasStoragePermission()) {
+            pendingDeletionVideos = targetVideos
+            requestStoragePermission()
+            return
+        }
+        
         deleteSelectedButton.isEnabled = false
         deleteAllButton.isEnabled = false
 
@@ -230,6 +268,40 @@ class VideoActivity : BasePlaybackActivity() {
             } else {
                 updateSelectionUi()
             }
+        }
+    }
+
+    private fun hasStoragePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+    
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                manageStoragePermissionLauncher.launch(intent)
+            } catch (e: Exception) {
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                manageStoragePermissionLauncher.launch(intent)
+            }
+        } else {
+            writeStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
+    
+    private fun proceedWithPendingDeletion() {
+        pendingDeletionVideos?.let { videos ->
+            pendingDeletionVideos = null
+            performDeletion(videos)
         }
     }
 
