@@ -76,8 +76,16 @@ class VideoFileScanner(private val context: Context) {
             Log.d(TAG, "Found ${fileSystemVideos.size} videos from file system")
             videos.addAll(fileSystemVideos)
             
-            // Remove duplicates and sort by name
-            val uniqueVideos = videos.distinctBy { it.path }
+            // Remove duplicates using a more robust strategy
+            // Group videos by name, size, and dateModified to identify the same file with different paths
+            val uniqueVideos = videos
+                .groupBy { Triple(it.name, it.size, it.dateModified) }
+                .values
+                .map { duplicateGroup ->
+                    // When duplicates are found, prefer MediaStore entries (those with positive IDs)
+                    // as they usually have more accurate metadata
+                    duplicateGroup.find { it.id > 0 } ?: duplicateGroup.first()
+                }
                 .sortedBy { it.name.lowercase() }
             
             Log.d(TAG, "Total unique videos found: ${uniqueVideos.size}")
