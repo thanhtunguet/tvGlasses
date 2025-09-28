@@ -169,12 +169,8 @@ class MainActivity : AppCompatActivity() {
 
         setDefaultLauncherButton.setOnClickListener {
             if (isDefaultLauncher()) {
-                // Already set as default launcher
-                MaterialAlertDialogBuilder(this)
-                    .setTitle("Already Default")
-                    .setMessage("tvGlasses is already set as your default launcher.")
-                    .setPositiveButton("OK", null)
-                    .show()
+                // Already set as default launcher, open launcher settings to allow changing
+                openLauncherSettings()
             } else {
                 // Open launcher settings
                 openLauncherSettings()
