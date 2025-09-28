@@ -10,6 +10,7 @@ private const val KEY_USERNAME = "username"
 private const val KEY_PASSWORD = "password"
 private const val KEY_MODE = "mode"
 private const val KEY_APP_LOCK_PASSWORD = "app_lock_password"
+private const val KEY_MAIN_LOCK_REQUIRED = "main_lock_required"
 
 /**
  * Persists and retrieves the [ConfigurationObject] backing the app's camera and video playback experience.
@@ -77,6 +78,17 @@ class ConfigurationRepository(private val sharedPreferences: SharedPreferences) 
     fun validateAppLockPassword(candidate: String): Boolean {
         val stored = getAppLockPassword()
         return stored != null && stored == candidate
+    }
+
+    fun isMainLockRequired(): Boolean {
+        val defaultValue = hasAppLockPassword()
+        return sharedPreferences.getBoolean(KEY_MAIN_LOCK_REQUIRED, defaultValue)
+    }
+
+    fun setMainLockRequired(required: Boolean) {
+        sharedPreferences.edit {
+            putBoolean(KEY_MAIN_LOCK_REQUIRED, required)
+        }
     }
 
     companion object {

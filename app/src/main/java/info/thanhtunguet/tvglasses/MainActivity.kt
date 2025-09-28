@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private var currentConfiguration: ConfigurationObject = ConfigurationObject()
     private var skipUnlockOnResume: Boolean = false
     private var isUnlocked: Boolean = false
+    private var requireUnlockOnResume: Boolean = false
     private var passwordDialog: AlertDialog? = null
     private var isReturningFromPlayback: Boolean = false
     private var hasRequestedPermissions: Boolean = false
@@ -62,6 +63,11 @@ class MainActivity : AppCompatActivity() {
 
         repository = ConfigurationRepository.create(applicationContext)
         currentConfiguration = repository.loadConfiguration()
+        val launchedFromPlayback = intent?.getBooleanExtra("returning_from_playback", false) ?: false
+        if (savedInstanceState == null && !launchedFromPlayback) {
+            repository.setMainLockRequired(repository.hasAppLockPassword())
+        }
+        requireUnlockOnResume = repository.isMainLockRequired()
         cameraStreamManager = CameraStreamManager.getInstance(this)
         setupUsbDetection()
 
@@ -224,30 +230,33 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        
-        // Always prompt for password if one is set and not already unlocked
-        if (repository.hasAppLockPassword() && !isUnlocked) {
+
+        requireUnlockOnResume = repository.isMainLockRequired()
+        val hasPassword = repository.hasAppLockPassword()
+
+        if (hasPassword && requireUnlockOnResume && !isUnlocked) {
             promptForPassword()
-        } else if (!repository.hasAppLockPassword()) {
-            // No password set, handle auto-launch or normal flow
-            if (skipUnlockOnResume) {
-                skipUnlockOnResume = false
-                return
-            }
-            isUnlocked = true
-            handlePostAuthentication()
-        } else if (skipUnlockOnResume) {
-            // Already unlocked and should skip (returning from activity)
+            return
+        }
+
+        if (skipUnlockOnResume) {
             skipUnlockOnResume = false
             return
         }
+
+        if (!isUnlocked) {
+            isUnlocked = true
+        }
+
+        handlePostAuthentication()
     }
 
     override fun onPause() {
         super.onPause()
         passwordDialog?.dismiss()
         passwordDialog = null
-        if (!isChangingConfigurations) {
+        requireUnlockOnResume = repository.isMainLockRequired()
+        if (!isChangingConfigurations && requireUnlockOnResume) {
             isUnlocked = false
         }
     }
@@ -453,7 +462,9 @@ class MainActivity : AppCompatActivity() {
                     newPassword != confirmPassword -> inputLayoutConfirm.error = getString(R.string.password_error_mismatch)
                     else -> {
                         repository.setAppLockPassword(newPassword)
+                        repository.setMainLockRequired(false)
                         isUnlocked = true
+                        requireUnlockOnResume = false
                         dialog.dismiss()
                         updatePasswordButtonVisibility()
                         handlePostAuthentication()
@@ -505,7 +516,9 @@ class MainActivity : AppCompatActivity() {
                     enteredPassword.isBlank() -> inputLayout.error = getString(R.string.password_error_empty)
                     !repository.validateAppLockPassword(enteredPassword) -> inputLayout.error = getString(R.string.password_error_incorrect)
                     else -> {
+                        repository.setMainLockRequired(false)
                         isUnlocked = true
+                        requireUnlockOnResume = false
                         dialog.dismiss()
                         handlePostAuthentication()
                     }
@@ -537,8 +550,12 @@ class MainActivity : AppCompatActivity() {
             repository.saveConfiguration(currentConfiguration)
         }
 
-        // Always lock the main activity when opening view mode
-        isUnlocked = false
+        if (repository.hasAppLockPassword()) {
+            // Require re-authentication after returning from view mode
+            repository.setMainLockRequired(true)
+            requireUnlockOnResume = true
+            isUnlocked = false
+        }
 
         val destination = when (mode) {
             PlaybackMode.CAMERA -> CameraActivity::class.java
@@ -745,6 +762,7 @@ class MainActivity : AppCompatActivity() {
                     newPassword != confirmPassword -> inputLayoutConfirm.error = getString(R.string.password_error_mismatch)
                     else -> {
                         repository.setAppLockPassword(newPassword)
+                        repository.setMainLockRequired(false)
                         dialog.dismiss()
                         Toast.makeText(this, R.string.password_change_success, Toast.LENGTH_SHORT).show()
                         updatePasswordButtonVisibility()
