@@ -85,6 +85,11 @@ class VideoActivity : BasePlaybackActivity() {
         setupUsbStorage()
         checkUsbConnection()
         scanForVideos()
+        
+        // Add debug logging for TV Box troubleshooting
+        if (android.util.Log.isLoggable("VideoActivity", android.util.Log.DEBUG)) {
+            logDeviceInfo()
+        }
     }
 
     private fun initializeViews() {
@@ -263,6 +268,9 @@ class VideoActivity : BasePlaybackActivity() {
         
         lifecycleScope.launch {
             try {
+                // Trigger media scan first to ensure MediaStore is up to date
+                videoScanner.triggerMediaScan()
+                
                 // Check USB connection and scan USB videos if needed
                 checkUsbConnection()
                 
@@ -576,6 +584,29 @@ class VideoActivity : BasePlaybackActivity() {
         updateUsbVisibility(isConnected)
         if (isConnected) {
             scanForUsbVideos()
+        }
+    }
+    
+    private fun logDeviceInfo() {
+        try {
+            android.util.Log.d("VideoActivity", "=== Device Debug Info ===")
+            android.util.Log.d("VideoActivity", "Device: ${android.os.Build.DEVICE}")
+            android.util.Log.d("VideoActivity", "Model: ${android.os.Build.MODEL}")
+            android.util.Log.d("VideoActivity", "Manufacturer: ${android.os.Build.MANUFACTURER}")
+            android.util.Log.d("VideoActivity", "SDK: ${android.os.Build.VERSION.SDK_INT}")
+            
+            // Check if this is a TV device
+            val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager
+            val currentUiMode = uiModeManager.currentModeType
+            android.util.Log.d("VideoActivity", "UI Mode: $currentUiMode (TV=${currentUiMode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION})")
+            
+            // Log external storage state
+            android.util.Log.d("VideoActivity", "External storage state: ${android.os.Environment.getExternalStorageState()}")
+            android.util.Log.d("VideoActivity", "External storage directory: ${android.os.Environment.getExternalStorageDirectory()}")
+            
+            android.util.Log.d("VideoActivity", "=== End Device Info ===")
+        } catch (e: Exception) {
+            android.util.Log.w("VideoActivity", "Error logging device info", e)
         }
     }
 }

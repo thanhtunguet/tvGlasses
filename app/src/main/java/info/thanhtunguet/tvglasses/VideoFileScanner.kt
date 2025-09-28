@@ -1,6 +1,7 @@
 package info.thanhtunguet.tvglasses
 
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
@@ -60,19 +61,61 @@ class VideoFileScanner(private val context: Context) {
         val videos = mutableListOf<VideoFile>()
         
         try {
+            Log.d(TAG, "Starting video scan...")
+            
+            // Log all available storage paths for debugging
+            logAvailableStoragePaths()
+            
             // Use MediaStore to find video files efficiently
-            videos.addAll(scanUsingMediaStore())
+            val mediaStoreVideos = scanUsingMediaStore()
+            Log.d(TAG, "Found ${mediaStoreVideos.size} videos from MediaStore")
+            videos.addAll(mediaStoreVideos)
             
             // Also scan file system for files that might not be in MediaStore
-            videos.addAll(scanFileSystem())
+            val fileSystemVideos = scanFileSystem()
+            Log.d(TAG, "Found ${fileSystemVideos.size} videos from file system")
+            videos.addAll(fileSystemVideos)
             
             // Remove duplicates and sort by name
-            videos.distinctBy { it.path }
+            val uniqueVideos = videos.distinctBy { it.path }
                 .sortedBy { it.name.lowercase() }
+            
+            Log.d(TAG, "Total unique videos found: ${uniqueVideos.size}")
+            
+            uniqueVideos
                 
         } catch (e: Exception) {
             Log.e(TAG, "Error scanning for video files", e)
             emptyList()
+        }
+    }
+    
+    private fun logAvailableStoragePaths() {
+        try {
+            Log.d(TAG, "=== Available Storage Paths ===")
+            
+            // Log primary external storage
+            val externalStorage = Environment.getExternalStorageDirectory()
+            Log.d(TAG, "External storage: ${externalStorage.absolutePath} (exists: ${externalStorage.exists()}, readable: ${externalStorage.canRead()})")
+            
+            // Log Download paths
+            val downloadPaths = getDownloadFolderPaths()
+            Log.d(TAG, "Download paths found: ${downloadPaths.size}")
+            downloadPaths.forEach { Log.d(TAG, "  - $it") }
+            
+            // Log secondary storage
+            val secondaryPaths = getSecondaryStoragePaths()
+            Log.d(TAG, "Secondary storage paths found: ${secondaryPaths.size}")
+            secondaryPaths.forEach { Log.d(TAG, "  - $it") }
+            
+            // Log TV paths
+            val tvPaths = getAndroidTvStoragePaths()
+            Log.d(TAG, "TV storage paths found: ${tvPaths.size}")
+            tvPaths.forEach { Log.d(TAG, "  - $it") }
+            
+            Log.d(TAG, "=== End Storage Paths ===")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error logging storage paths", e)
         }
     }
     
@@ -88,8 +131,9 @@ class VideoFileScanner(private val context: Context) {
             MediaStore.Video.Media.DATE_MODIFIED
         )
         
-        val selection = "${MediaStore.Video.Media.DATA} LIKE ? OR ${MediaStore.Video.Media.DATA} LIKE ?"
-        val selectionArgs = arrayOf("%.mp4", "%.MP4")
+        // More comprehensive selection for different video formats and case variations
+        val selection = "${MediaStore.Video.Media.DATA} LIKE ? OR ${MediaStore.Video.Media.DATA} LIKE ? OR ${MediaStore.Video.Media.DATA} LIKE ? OR ${MediaStore.Video.Media.DATA} LIKE ?"
+        val selectionArgs = arrayOf("%.mp4", "%.MP4", "%.mkv", "%.avi")
         val sortOrder = "${MediaStore.Video.Media.DISPLAY_NAME} ASC"
         
         try {
@@ -147,12 +191,33 @@ class VideoFileScanner(private val context: Context) {
             scanDirectory(internalStorage, videos, scannedPaths)
         }
         
+        // Scan common Download folders first (highest priority)
+        val downloadPaths = getDownloadFolderPaths()
+        for (downloadPath in downloadPaths) {
+            val downloadDir = File(downloadPath)
+            if (downloadDir.exists() && downloadDir.canRead()) {
+                Log.d(TAG, "Scanning Download folder: $downloadPath")
+                scanDirectory(downloadDir, videos, scannedPaths)
+            }
+        }
+        
         // Scan SD card (secondary external storage)
         val secondaryStoragePaths = getSecondaryStoragePaths()
         for (storagePath in secondaryStoragePaths) {
             val storageDir = File(storagePath)
             if (storageDir.exists() && storageDir.canRead()) {
+                Log.d(TAG, "Scanning secondary storage: $storagePath")
                 scanDirectory(storageDir, videos, scannedPaths)
+            }
+        }
+        
+        // Scan Android TV specific paths
+        val tvPaths = getAndroidTvStoragePaths()
+        for (tvPath in tvPaths) {
+            val tvDir = File(tvPath)
+            if (tvDir.exists() && tvDir.canRead()) {
+                Log.d(TAG, "Scanning TV storage: $tvPath")
+                scanDirectory(tvDir, videos, scannedPaths)
             }
         }
         
@@ -187,7 +252,9 @@ class VideoFileScanner(private val context: Context) {
     }
     
     private fun isMP4File(file: File): Boolean {
-        return file.name.lowercase().endsWith(".mp4")
+        val lowerName = file.name.lowercase()
+        val supportedExtensions = listOf(".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".3gp", ".webm")
+        return supportedExtensions.any { lowerName.endsWith(it) }
     }
     
     private fun isSystemDirectory(file: File): Boolean {
@@ -204,17 +271,30 @@ class VideoFileScanner(private val context: Context) {
             return false
         }
         
-        // Include internal storage and SD card paths
+        // Include internal storage and SD card paths (more comprehensive for TV)
         val validKeywords = listOf(
-            "/storage/emulated",  // Internal storage
-            "/storage/sdcard",    // SD card
-            "/sdcard",            // Legacy SD card path
-            "/mnt/sdcard",        // Legacy SD card path
-            "/storage/external_sd" // External SD card
+            "/storage/emulated",     // Internal storage
+            "/storage/sdcard",       // SD card
+            "/sdcard",              // Legacy SD card path
+            "/mnt/sdcard",          // Legacy SD card path
+            "/storage/external_sd",  // External SD card
+            "/storage/external",     // TV external storage
+            "/storage/self",         // Self storage (Android TV)
+            "/storage/legacy",       // Legacy storage
+            "/mnt/media_rw",        // Media RW mount (but not USB)
+            "/data/media"           // Data media path
         )
         
-        return validKeywords.any { lowerPath.contains(it) } || 
-               lowerPath.startsWith("/storage/") && !lowerPath.contains("usb")
+        // Check if path contains any valid keywords
+        val hasValidKeyword = validKeywords.any { lowerPath.contains(it) }
+        
+        // Also include any /storage/ path that doesn't contain "usb"
+        val isGeneralStorage = lowerPath.startsWith("/storage/") && !lowerPath.contains("usb")
+        
+        // Include Download folders specifically
+        val isDownloadFolder = lowerPath.contains("/download")
+        
+        return hasValidKeyword || isGeneralStorage || isDownloadFolder
     }
     
     private fun getSecondaryStoragePaths(): List<String> {
@@ -257,5 +337,127 @@ class VideoFileScanner(private val context: Context) {
         }
         
         return paths.distinct()
+    }
+    
+    private fun getDownloadFolderPaths(): List<String> {
+        val downloadPaths = mutableListOf<String>()
+        
+        // Primary Download folders
+        val primaryDownloadPaths = listOf(
+            "${Environment.getExternalStorageDirectory()}/Download",
+            "${Environment.getExternalStorageDirectory()}/Downloads",
+            "/sdcard/Download",
+            "/sdcard/Downloads",
+            "/storage/emulated/0/Download",
+            "/storage/emulated/0/Downloads"
+        )
+        
+        for (path in primaryDownloadPaths) {
+            val dir = File(path)
+            if (dir.exists() && dir.canRead()) {
+                downloadPaths.add(path)
+                Log.d(TAG, "Found Download folder: $path")
+            }
+        }
+        
+        // SD card Download folders
+        val secondaryStoragePaths = getSecondaryStoragePaths()
+        for (storagePath in secondaryStoragePaths) {
+            val downloadDirs = listOf(
+                "$storagePath/Download",
+                "$storagePath/Downloads"
+            )
+            for (downloadDir in downloadDirs) {
+                val dir = File(downloadDir)
+                if (dir.exists() && dir.canRead()) {
+                    downloadPaths.add(downloadDir)
+                    Log.d(TAG, "Found secondary Download folder: $downloadDir")
+                }
+            }
+        }
+        
+        return downloadPaths.distinct()
+    }
+    
+    private fun getAndroidTvStoragePaths(): List<String> {
+        val tvPaths = mutableListOf<String>()
+        
+        // Android TV specific storage paths
+        val commonTvPaths = listOf(
+            "/storage/emulated/legacy",
+            "/storage/sdcard0",
+            "/storage/sdcard",
+            "/mnt/sdcard",
+            "/mnt/sdcard0",
+            "/storage/emulated/legacy/Download",
+            "/storage/emulated/legacy/Downloads",
+            "/storage/self/primary",
+            "/storage/self/primary/Download",
+            "/storage/self/primary/Downloads"
+        )
+        
+        for (path in commonTvPaths) {
+            val dir = File(path)
+            if (dir.exists() && dir.canRead()) {
+                tvPaths.add(path)
+                Log.d(TAG, "Found TV storage path: $path")
+            }
+        }
+        
+        // Check for additional TV box specific mount points
+        val tvMountPoints = listOf(
+            "/mnt/media_rw",
+            "/storage/external",
+            "/storage/external_storage"
+        )
+        
+        for (mountPoint in tvMountPoints) {
+            val mountDir = File(mountPoint)
+            if (mountDir.exists() && mountDir.canRead()) {
+                try {
+                    mountDir.listFiles()?.forEach { subDir ->
+                        if (subDir.isDirectory && subDir.canRead()) {
+                            tvPaths.add(subDir.absolutePath)
+                            Log.d(TAG, "Found TV mount point: ${subDir.absolutePath}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error scanning TV mount point: $mountPoint", e)
+                }
+            }
+        }
+        
+        return tvPaths.distinct()
+    }
+    
+    /**
+     * Force a media scan of common video directories to ensure MediaStore is up to date
+     */
+    fun triggerMediaScan() {
+        try {
+            val pathsToScan = mutableListOf<String>()
+            
+            // Add common video directories
+            val downloadPaths = getDownloadFolderPaths()
+            pathsToScan.addAll(downloadPaths)
+            
+            val externalStorage = Environment.getExternalStorageDirectory()
+            if (externalStorage.exists()) {
+                pathsToScan.add(externalStorage.absolutePath)
+            }
+            
+            if (pathsToScan.isNotEmpty()) {
+                Log.d(TAG, "Triggering media scan for ${pathsToScan.size} paths")
+                MediaScannerConnection.scanFile(
+                    context,
+                    pathsToScan.toTypedArray(),
+                    null
+                ) { path, uri ->
+                    Log.d(TAG, "Media scan completed for: $path")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error triggering media scan", e)
+        }
     }
 }
