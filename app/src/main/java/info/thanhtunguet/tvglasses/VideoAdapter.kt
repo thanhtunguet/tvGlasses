@@ -6,6 +6,7 @@ import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -19,8 +20,11 @@ import java.io.File
 
 class VideoAdapter(
     private val onVideoClick: (VideoFile) -> Unit,
+    private val onSelectionToggle: (VideoFile, Boolean) -> Unit,
     private val coroutineScope: CoroutineScope
 ) : ListAdapter<VideoFile, VideoAdapter.VideoViewHolder>(VideoFileDiffCallback()) {
+
+    private var selectedPaths: Set<String> = emptySet()
 
     class VideoViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val thumbnail: ImageView = view.findViewById(R.id.imageVideoThumbnail)
@@ -29,6 +33,7 @@ class VideoAdapter(
         val date: TextView = view.findViewById(R.id.textVideoDate)
         val path: TextView = view.findViewById(R.id.textVideoPath)
         val duration: TextView = view.findViewById(R.id.textVideoDuration)
+        val checkBox: CheckBox = view.findViewById(R.id.checkboxSelectVideo)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VideoViewHolder {
@@ -60,10 +65,29 @@ class VideoAdapter(
         // Load thumbnail asynchronously
         loadThumbnail(video, holder.thumbnail)
         
-        // Set click listener
+        // Selection checkbox handling
+        holder.checkBox.setOnCheckedChangeListener(null)
+        val isSelected = selectedPaths.contains(video.path)
+        holder.checkBox.isChecked = isSelected
+        holder.checkBox.setOnCheckedChangeListener { _, checked ->
+            onSelectionToggle(video, checked)
+        }
+
+        // Set click listener for playback
         holder.itemView.setOnClickListener {
             onVideoClick(video)
         }
+
+        holder.itemView.setOnLongClickListener {
+            val newState = !selectedPaths.contains(video.path)
+            onSelectionToggle(video, newState)
+            true
+        }
+    }
+
+    fun updateSelection(selection: Set<String>) {
+        selectedPaths = selection.toSet()
+        notifyDataSetChanged()
     }
     
     private fun loadThumbnail(video: VideoFile, imageView: ImageView) {
