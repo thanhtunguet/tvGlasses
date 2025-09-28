@@ -50,4 +50,15 @@
         <item quantity="one">Deleted %d video.</item>
         <item quantity="other">Deleted %d videos.</item>
     </plurals>
+    
+    <!-- Security strings -->
+    <string name="security_heading">Security</string>
+    <string name="button_set_password">Set Password</string>
+    <string name="button_change_password">Change Password</string>
+    <string name="password_change_title">Change access password</string>
+    <string name="password_change_message">Enter your current password and set a new one.</string>
+    <string name="password_current_hint">Current password</string>
+    <string name="password_new_hint">New password</string>
+    <string name="password_error_current_incorrect">Current password is incorrect.</string>
+    <string name="password_change_success">Password changed successfully.</string>
 </resources>

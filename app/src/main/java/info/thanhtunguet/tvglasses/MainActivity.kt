@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.widget.ImageButton
+import android.widget.Toast
 import info.thanhtunguet.tvglasses.UriEncodingUtils
 import android.widget.RadioGroup
 import androidx.appcompat.app.AlertDialog
@@ -32,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private var isReturningFromPlayback: Boolean = false
     private var hasRequestedPermissions: Boolean = false
     private var hasPromptedForLauncher: Boolean = false
+    private var shouldAutoLaunchAfterAuth: Boolean = false
     
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -72,6 +74,8 @@ class MainActivity : AppCompatActivity() {
         val setDefaultLauncherButton = findViewById<MaterialButton>(R.id.buttonSetDefaultLauncher)
         val manageVideosButton = findViewById<MaterialButton>(R.id.buttonManageVideos)
         val systemSettingsButton = findViewById<ImageButton>(R.id.buttonOpenSystemSettings)
+        val setPasswordButton = findViewById<MaterialButton>(R.id.buttonSetPassword)
+        val changePasswordButton = findViewById<MaterialButton>(R.id.buttonChangePassword)
 
         // Display URL with credentials for better UX
         val displayUrl = buildUrlWithCredentials(
@@ -181,8 +185,19 @@ class MainActivity : AppCompatActivity() {
             openSystemSettings()
         }
 
+        setPasswordButton.setOnClickListener {
+            showSetPasswordDialog()
+        }
+
+        changePasswordButton.setOnClickListener {
+            showChangePasswordDialog()
+        }
+
         // Initialize camera stream if configuration is valid
         updateCameraStream()
+        
+        // Update password button visibility
+        updatePasswordButtonVisibility()
 
         if (savedInstanceState == null) {
             // Check if we're returning from playback activity
@@ -209,17 +224,22 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (skipUnlockOnResume) {
+        
+        // Always prompt for password if one is set and not already unlocked
+        if (repository.hasAppLockPassword() && !isUnlocked) {
+            promptForPassword()
+        } else if (!repository.hasAppLockPassword()) {
+            // No password set, handle auto-launch or normal flow
+            if (skipUnlockOnResume) {
+                skipUnlockOnResume = false
+                return
+            }
+            isUnlocked = true
+            handlePostAuthentication()
+        } else if (skipUnlockOnResume) {
+            // Already unlocked and should skip (returning from activity)
             skipUnlockOnResume = false
             return
-        }
-        
-        if (repository.hasAppLockPassword()) {
-            promptForPassword()
-        } else {
-            // No password set, user is automatically unlocked
-            isUnlocked = true
-            checkAndRequestPermissions()
         }
     }
 
@@ -361,8 +381,18 @@ class MainActivity : AppCompatActivity() {
             isReturningFromPlayback = false
             return
         }
-        skipUnlockOnResume = true
-        openPlayback(currentConfiguration.mode, modeGroup)
+        // Auto-launch with valid configuration, bypass normal authentication flow
+        // but only if no password is set or if already unlocked
+        if (!repository.hasAppLockPassword()) {
+            // No password set, can auto-launch directly
+            skipUnlockOnResume = true
+            openPlayback(currentConfiguration.mode, modeGroup)
+        } else {
+            // Password is set, need to authenticate first then auto-launch
+            skipUnlockOnResume = true
+            // Set flag to auto-launch after authentication
+            shouldAutoLaunchAfterAuth = true
+        }
     }
 
     private fun hasValidConfiguration(): Boolean {
@@ -415,7 +445,8 @@ class MainActivity : AppCompatActivity() {
                         repository.setAppLockPassword(newPassword)
                         isUnlocked = true
                         dialog.dismiss()
-                        checkAndRequestPermissions()
+                        updatePasswordButtonVisibility()
+                        handlePostAuthentication()
                     }
                 }
             }
@@ -456,7 +487,7 @@ class MainActivity : AppCompatActivity() {
                     else -> {
                         isUnlocked = true
                         dialog.dismiss()
-                        checkAndRequestPermissions()
+                        handlePostAuthentication()
                     }
                 }
             }
@@ -485,6 +516,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             repository.saveConfiguration(currentConfiguration)
         }
+
+        // Always lock the main activity when opening view mode
+        isUnlocked = false
 
         val destination = when (mode) {
             PlaybackMode.CAMERA -> CameraActivity::class.java
@@ -629,6 +663,79 @@ class MainActivity : AppCompatActivity() {
         )
         
         lifecycle.addObserver(usbDetectionManager)
+    }
+    
+    private fun updatePasswordButtonVisibility() {
+        val setPasswordButton = findViewById<MaterialButton>(R.id.buttonSetPassword)
+        val changePasswordButton = findViewById<MaterialButton>(R.id.buttonChangePassword)
+        
+        if (repository.hasAppLockPassword()) {
+            setPasswordButton.visibility = View.GONE
+            changePasswordButton.visibility = View.VISIBLE
+        } else {
+            setPasswordButton.visibility = View.VISIBLE
+            changePasswordButton.visibility = View.GONE
+        }
+    }
+    
+    private fun showChangePasswordDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_password_change, null)
+        val inputLayoutCurrent = view.findViewById<TextInputLayout>(R.id.inputLayoutCurrentPassword)
+        val inputLayoutNew = view.findViewById<TextInputLayout>(R.id.inputLayoutNewPassword)
+        val inputLayoutConfirm = view.findViewById<TextInputLayout>(R.id.inputLayoutConfirmPassword)
+        val currentPasswordField = view.findViewById<TextInputEditText>(R.id.inputCurrentPassword)
+        val newPasswordField = view.findViewById<TextInputEditText>(R.id.inputNewPassword)
+        val confirmPasswordField = view.findViewById<TextInputEditText>(R.id.inputConfirmPassword)
+
+        currentPasswordField.doAfterTextChanged { inputLayoutCurrent.error = null }
+        newPasswordField.doAfterTextChanged { inputLayoutNew.error = null }
+        confirmPasswordField.doAfterTextChanged { inputLayoutConfirm.error = null }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.password_change_title)
+            .setMessage(R.string.password_change_message)
+            .setView(view)
+            .setCancelable(true)
+            .setPositiveButton(R.string.password_dialog_confirm, null)
+            .setNegativeButton(R.string.password_dialog_cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            positiveButton.setOnClickListener {
+                val currentPassword = currentPasswordField.text?.toString().orEmpty()
+                val newPassword = newPasswordField.text?.toString().orEmpty()
+                val confirmPassword = confirmPasswordField.text?.toString().orEmpty()
+
+                when {
+                    currentPassword.isBlank() -> inputLayoutCurrent.error = getString(R.string.password_error_empty)
+                    !repository.validateAppLockPassword(currentPassword) -> inputLayoutCurrent.error = getString(R.string.password_error_current_incorrect)
+                    newPassword.isBlank() -> inputLayoutNew.error = getString(R.string.password_error_empty)
+                    confirmPassword.isBlank() -> inputLayoutConfirm.error = getString(R.string.password_error_empty)
+                    newPassword != confirmPassword -> inputLayoutConfirm.error = getString(R.string.password_error_mismatch)
+                    else -> {
+                        repository.setAppLockPassword(newPassword)
+                        dialog.dismiss()
+                        Toast.makeText(this, R.string.password_change_success, Toast.LENGTH_SHORT).show()
+                        updatePasswordButtonVisibility()
+                    }
+                }
+            }
+        }
+
+        dialog.show()
+        currentPasswordField.requestFocus()
+    }
+    
+    private fun handlePostAuthentication() {
+        if (shouldAutoLaunchAfterAuth) {
+            shouldAutoLaunchAfterAuth = false
+            // Auto-launch playback after successful authentication
+            openPlayback(currentConfiguration.mode, findViewById(R.id.radioModeGroup))
+        } else {
+            // Normal flow - request permissions and continue
+            checkAndRequestPermissions()
+        }
     }
     
 }
