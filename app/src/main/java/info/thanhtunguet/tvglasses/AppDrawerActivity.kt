@@ -25,10 +25,12 @@ class AppDrawerActivity : AppCompatActivity() {
     
     private lateinit var recyclerView: RecyclerView
     private lateinit var appAdapter: AppAdapter
+    private lateinit var usbDetectionManager: UsbDetectionManager
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_drawer)
+        setupUsbDetection()
         
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -100,6 +102,17 @@ class AppDrawerActivity : AppCompatActivity() {
                 // App launch failed
             }
         }
+    }
+    
+    private fun setupUsbDetection() {
+        usbDetectionManager = UsbDetectionManager.createWithAutoNavigation(
+            context = this,
+            onUsbStateChanged = { isConnected ->
+                // Optional: Add any UI changes when USB is connected/disconnected
+            }
+        )
+        
+        lifecycle.addObserver(usbDetectionManager)
     }
 }
 

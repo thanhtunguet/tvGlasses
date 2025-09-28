@@ -17,6 +17,7 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
 
     protected lateinit var repository: ConfigurationRepository
     protected var configuration: ConfigurationObject = ConfigurationObject()
+    protected lateinit var usbDetectionManager: UsbDetectionManager
 
     /** Defines which playback mode this activity represents. */
     abstract val mode: PlaybackMode
@@ -27,6 +28,7 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
         configuration = repository.loadConfiguration()
         syncModeIfNeeded()
         enterImmersiveMode()
+        setupUsbDetection()
         
         // Handle back button press
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -119,5 +121,49 @@ abstract class BasePlaybackActivity : AppCompatActivity() {
             keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
             keyCode == KeyEvent.KEYCODE_ENTER ||
             keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+    }
+    
+    private fun setupUsbDetection() {
+        usbDetectionManager = if (mode == PlaybackMode.VIDEO) {
+            // For VideoActivity, don't auto-navigate but handle USB state changes
+            UsbDetectionManager.createForVideoActivity(
+                context = this,
+                onUsbConnected = { onUsbConnected() },
+                onUsbDisconnected = { onUsbDisconnected() },
+                onUsbStateChanged = { isConnected -> onUsbStateChanged(isConnected) }
+            )
+        } else {
+            // For other activities, auto-navigate to VideoActivity when USB is connected
+            UsbDetectionManager.createWithAutoNavigation(
+                context = this,
+                onUsbStateChanged = { isConnected -> onUsbStateChanged(isConnected) }
+            )
+        }
+        
+        lifecycle.addObserver(usbDetectionManager)
+    }
+    
+    /**
+     * Called when USB storage is connected
+     * Override in subclasses to handle USB connection
+     */
+    protected open fun onUsbConnected() {
+        // Default implementation - can be overridden by subclasses
+    }
+    
+    /**
+     * Called when USB storage is disconnected
+     * Override in subclasses to handle USB disconnection
+     */
+    protected open fun onUsbDisconnected() {
+        // Default implementation - can be overridden by subclasses
+    }
+    
+    /**
+     * Called when USB connection state changes
+     * Override in subclasses to handle USB state changes
+     */
+    protected open fun onUsbStateChanged(isConnected: Boolean) {
+        // Default implementation - can be overridden by subclasses
     }
 }

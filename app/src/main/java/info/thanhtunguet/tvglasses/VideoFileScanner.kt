@@ -243,9 +243,11 @@ class VideoFileScanner(private val context: Context) {
             
             for (volume in storageVolumes) {
                 if (volume.isRemovable && !volume.isPrimary) {
-                    volume.directory?.let { dir ->
-                        if (dir.exists() && dir.canRead()) {
-                            paths.add(dir.absolutePath)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        volume.directory?.let { dir ->
+                            if (dir.exists() && dir.canRead()) {
+                                paths.add(dir.absolutePath)
+                            }
                         }
                     }
                 }

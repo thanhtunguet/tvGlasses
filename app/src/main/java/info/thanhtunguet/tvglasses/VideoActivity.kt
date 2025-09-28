@@ -32,15 +32,23 @@ class VideoActivity : BasePlaybackActivity() {
     override val mode: PlaybackMode = PlaybackMode.VIDEO
 
     private lateinit var recyclerView: RecyclerView
+    private lateinit var recyclerViewUsbVideos: RecyclerView
     private lateinit var progressBar: ProgressBar
     private lateinit var textVideoCount: TextView
     private lateinit var layoutEmptyState: View
+    private lateinit var layoutUsbVideos: View
     private lateinit var deleteSelectedButton: MaterialButton
     private lateinit var deleteAllButton: MaterialButton
+    private lateinit var buttonSyncFromUsb: MaterialButton
     private lateinit var videoAdapter: VideoAdapter
+    private lateinit var usbVideoAdapter: VideoAdapter
     private lateinit var videoScanner: VideoFileScanner
+    private lateinit var usbStorageHelper: UsbStorageHelper
     private val selectedVideoPaths = linkedSetOf<String>()
+    private val selectedUsbVideoPaths = linkedSetOf<String>()
     private var currentVideos: List<VideoFile> = emptyList()
+    private var currentUsbVideos: List<VideoFile> = emptyList()
+    private var isUsbConnected = false
     
     private val manageStoragePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -74,21 +82,27 @@ class VideoActivity : BasePlaybackActivity() {
         setupRecyclerView()
         setupDeleteButtons()
         setupVideoScanner()
+        setupUsbStorage()
+        checkUsbConnection()
         scanForVideos()
     }
 
     private fun initializeViews() {
         recyclerView = findViewById(R.id.recyclerViewVideos)
+        recyclerViewUsbVideos = findViewById(R.id.recyclerViewUsbVideos)
         progressBar = findViewById(R.id.progressBarScanning)
         textVideoCount = findViewById(R.id.textVideoCount)
         layoutEmptyState = findViewById(R.id.layoutEmptyState)
+        layoutUsbVideos = findViewById(R.id.layoutUsbVideos)
         deleteSelectedButton = findViewById(R.id.buttonDeleteSelected)
         deleteAllButton = findViewById(R.id.buttonDeleteAll)
+        buttonSyncFromUsb = findViewById(R.id.buttonSyncFromUsb)
     }
 
     private fun setupDeleteButtons() {
         deleteSelectedButton.setOnClickListener { confirmDeleteSelected() }
         deleteAllButton.setOnClickListener { confirmDeleteAll() }
+        buttonSyncFromUsb.setOnClickListener { syncAllVideosFromUsb() }
         updateSelectionUi()
     }
 
@@ -103,8 +117,24 @@ class VideoActivity : BasePlaybackActivity() {
             coroutineScope = lifecycleScope
         )
         
+        usbVideoAdapter = VideoAdapter(
+            onVideoClick = { videoFile ->
+                playVideo(videoFile)
+            },
+            onSelectionToggle = { videoFile, isSelected ->
+                onUsbVideoSelectionChanged(videoFile, isSelected)
+            },
+            coroutineScope = lifecycleScope
+        )
+        
         recyclerView.apply {
             adapter = videoAdapter
+            layoutManager = LinearLayoutManager(this@VideoActivity)
+            setHasFixedSize(true)
+        }
+        
+        recyclerViewUsbVideos.apply {
+            adapter = usbVideoAdapter
             layoutManager = LinearLayoutManager(this@VideoActivity)
             setHasFixedSize(true)
         }
@@ -113,12 +143,129 @@ class VideoActivity : BasePlaybackActivity() {
     private fun setupVideoScanner() {
         videoScanner = VideoFileScanner(this)
     }
+    
+    private fun setupUsbStorage() {
+        usbStorageHelper = UsbStorageHelper(this)
+    }
+    
+    private fun checkUsbConnection() {
+        lifecycleScope.launch {
+            try {
+                val hasUsb = usbStorageHelper.hasUsbStorageConnected()
+                updateUsbVisibility(hasUsb)
+                if (hasUsb) {
+                    scanForUsbVideos()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VideoActivity", "Error checking USB connection", e)
+            }
+        }
+    }
+    
+    private fun updateUsbVisibility(hasUsb: Boolean) {
+        isUsbConnected = hasUsb
+        layoutUsbVideos.visibility = if (hasUsb) View.VISIBLE else View.GONE
+    }
+    
+    private fun scanForUsbVideos() {
+        if (!isUsbConnected) return
+        
+        lifecycleScope.launch {
+            try {
+                val usbVideos = usbStorageHelper.scanUsbVideos()
+                currentUsbVideos = usbVideos
+                usbVideoAdapter.submitList(currentUsbVideos)
+                selectedUsbVideoPaths.retainAll(currentUsbVideos.map { it.path })
+                updateSelectionUi()
+            } catch (e: Exception) {
+                android.util.Log.e("VideoActivity", "Error scanning USB videos", e)
+            }
+        }
+    }
+    
+    private fun onUsbVideoSelectionChanged(videoFile: VideoFile, isSelected: Boolean) {
+        if (isSelected) {
+            selectedUsbVideoPaths.add(videoFile.path)
+        } else {
+            selectedUsbVideoPaths.remove(videoFile.path)
+        }
+        updateSelectionUi()
+        usbVideoAdapter.updateSelection(selectedUsbVideoPaths)
+    }
+    
+    private fun syncAllVideosFromUsb() {
+        if (currentUsbVideos.isEmpty()) {
+            Toast.makeText(this, "No videos found on USB storage", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val videosToSync = if (selectedUsbVideoPaths.isNotEmpty()) {
+            currentUsbVideos.filter { selectedUsbVideoPaths.contains(it.path) }
+        } else {
+            currentUsbVideos
+        }
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Sync Videos from USB")
+            .setMessage("Sync ${videosToSync.size} video(s) from USB to internal storage?")
+            .setPositiveButton("Sync") { _, _ ->
+                performUsbSync(videosToSync)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun performUsbSync(videosToSync: List<VideoFile>) {
+        buttonSyncFromUsb.isEnabled = false
+        buttonSyncFromUsb.text = "Syncing..."
+        
+        lifecycleScope.launch {
+            var successCount = 0
+            var failCount = 0
+            
+            for (video in videosToSync) {
+                try {
+                    val success = usbStorageHelper.copyVideoFromUsbToStorage(
+                        video.path,
+                        StorageType.INTERNAL
+                    )
+                    if (success) {
+                        successCount++
+                    } else {
+                        failCount++
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("VideoActivity", "Error syncing video: ${video.path}", e)
+                    failCount++
+                }
+            }
+            
+            val message = if (failCount == 0) {
+                "Successfully synced $successCount video(s)"
+            } else {
+                "Synced $successCount video(s), failed $failCount"
+            }
+            
+            Toast.makeText(this@VideoActivity, message, Toast.LENGTH_LONG).show()
+            
+            buttonSyncFromUsb.isEnabled = true
+            buttonSyncFromUsb.text = "Sync All"
+            
+            // Refresh local videos to show newly synced content
+            if (successCount > 0) {
+                scanForVideos()
+            }
+        }
+    }
 
     private fun scanForVideos() {
         showScanningState()
         
         lifecycleScope.launch {
             try {
+                // Check USB connection and scan USB videos if needed
+                checkUsbConnection()
+                
                 val videos = videoScanner.scanForVideoFiles()
                 if (videos.isNotEmpty()) {
                     showVideoList(videos)
@@ -141,6 +288,11 @@ class VideoActivity : BasePlaybackActivity() {
         deleteAllButton.isEnabled = false
         selectedVideoPaths.clear()
         videoAdapter.updateSelection(emptySet())
+        
+        if (isUsbConnected) {
+            selectedUsbVideoPaths.clear()
+            usbVideoAdapter.updateSelection(emptySet())
+        }
     }
 
     private fun showVideoList(videos: List<VideoFile>) {
@@ -159,7 +311,7 @@ class VideoActivity : BasePlaybackActivity() {
         currentVideos = emptyList()
         textVideoCount.text = getString(R.string.video_no_results)
         recyclerView.visibility = View.GONE
-        layoutEmptyState.visibility = View.VISIBLE
+        layoutEmptyState.visibility = if (!isUsbConnected || currentUsbVideos.isEmpty()) View.VISIBLE else View.GONE
         videoAdapter.submitList(emptyList())
         selectedVideoPaths.clear()
         updateSelectionUi()
@@ -182,6 +334,8 @@ class VideoActivity : BasePlaybackActivity() {
     private fun updateSelectionUi() {
         val selectedCount = selectedVideoPaths.size
         val totalCount = currentVideos.size
+        val selectedUsbCount = selectedUsbVideoPaths.size
+        val totalUsbCount = currentUsbVideos.size
 
         deleteSelectedButton.isEnabled = selectedCount > 0
         deleteAllButton.isEnabled = totalCount > 0
@@ -198,7 +352,22 @@ class VideoActivity : BasePlaybackActivity() {
             getString(R.string.video_delete_all)
         }
 
+        // Update sync button text
+        if (isUsbConnected) {
+            buttonSyncFromUsb.text = if (selectedUsbCount > 0) {
+                "Sync Selected ($selectedUsbCount)"
+            } else if (totalUsbCount > 0) {
+                "Sync All ($totalUsbCount)"
+            } else {
+                "Sync All"
+            }
+            buttonSyncFromUsb.isEnabled = totalUsbCount > 0
+        }
+
         videoAdapter.updateSelection(selectedVideoPaths)
+        if (isUsbConnected) {
+            usbVideoAdapter.updateSelection(selectedUsbVideoPaths)
+        }
     }
 
     private fun confirmDeleteSelected() {
@@ -382,6 +551,31 @@ class VideoActivity : BasePlaybackActivity() {
             } catch (fallbackException: Exception) {
                 android.util.Log.e("VideoActivity", "Fallback video player also failed", fallbackException)
             }
+        }
+    }
+    
+    override fun onUsbConnected() {
+        super.onUsbConnected()
+        // Refresh USB connection and scan for videos
+        checkUsbConnection()
+    }
+    
+    override fun onUsbDisconnected() {
+        super.onUsbDisconnected()
+        // Hide USB section and clear USB video list
+        updateUsbVisibility(false)
+        currentUsbVideos = emptyList()
+        selectedUsbVideoPaths.clear()
+        usbVideoAdapter.submitList(emptyList())
+        updateSelectionUi()
+    }
+    
+    override fun onUsbStateChanged(isConnected: Boolean) {
+        super.onUsbStateChanged(isConnected)
+        // This handles both connection and disconnection
+        updateUsbVisibility(isConnected)
+        if (isConnected) {
+            scanForUsbVideos()
         }
     }
 }

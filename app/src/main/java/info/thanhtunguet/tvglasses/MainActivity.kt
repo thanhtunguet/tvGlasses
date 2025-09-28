@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var repository: ConfigurationRepository
     private lateinit var cameraStreamManager: CameraStreamManager
+    private lateinit var usbDetectionManager: UsbDetectionManager
     private var currentConfiguration: ConfigurationObject = ConfigurationObject()
     private var skipUnlockOnResume: Boolean = false
     private var isUnlocked: Boolean = false
@@ -60,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         repository = ConfigurationRepository.create(applicationContext)
         currentConfiguration = repository.loadConfiguration()
         cameraStreamManager = CameraStreamManager.getInstance(this)
+        setupUsbDetection()
 
         val rtspField = findViewById<TextInputEditText>(R.id.editRtspUrl)
         val usernameField = findViewById<TextInputEditText>(R.id.editUsername)
@@ -619,6 +621,18 @@ class MainActivity : AppCompatActivity() {
     
     private fun hasValidCameraConfiguration(): Boolean {
         return currentConfiguration.rtspUrl.isNotBlank()
+    }
+    
+    private fun setupUsbDetection() {
+        usbDetectionManager = UsbDetectionManager.createWithAutoNavigation(
+            context = this,
+            onUsbStateChanged = { isConnected ->
+                // Optional: Add any UI changes when USB is connected/disconnected
+                // For example, show a notification or change button state
+            }
+        )
+        
+        lifecycle.addObserver(usbDetectionManager)
     }
     
 }
