@@ -431,6 +431,16 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(R.string.password_dialog_confirm, null)
             .create()
 
+        // Add blur effect and dark backdrop
+        dialog.window?.let { window ->
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+                android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+            )
+            window.setDimAmount(0.9f) // Dark backdrop with 70% opacity
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        }
+
         dialog.setOnShowListener {
             val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             positiveButton.setOnClickListener {
@@ -476,6 +486,16 @@ class MainActivity : AppCompatActivity() {
             .setCancelable(false)
             .setPositiveButton(R.string.password_dialog_confirm, null)
             .create()
+
+        // Add blur effect and dark backdrop
+        dialog.window?.let { window ->
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+                android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+            )
+            window.setDimAmount(0.7f) // Dark backdrop with 70% opacity
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        }
 
         dialog.setOnShowListener {
             val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
@@ -699,6 +719,16 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(R.string.password_dialog_confirm, null)
             .setNegativeButton(R.string.password_dialog_cancel, null)
             .create()
+
+        // Add blur effect and dark backdrop
+        dialog.window?.let { window ->
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+                android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+            )
+            window.setDimAmount(0.7f) // Dark backdrop with 70% opacity
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        }
 
         dialog.setOnShowListener {
             val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
