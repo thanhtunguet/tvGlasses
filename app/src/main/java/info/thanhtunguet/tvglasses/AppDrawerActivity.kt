@@ -40,6 +40,12 @@ class AppDrawerActivity : AppCompatActivity() {
         recyclerView.layoutManager = GridLayoutManager(this, 4)
         
         loadInstalledApps()
+        
+        // Add refresh functionality (long press on toolbar title)
+        toolbar.setOnLongClickListener {
+            refreshApps()
+            true
+        }
     }
     
     override fun onSupportNavigateUp(): Boolean {
@@ -49,34 +55,117 @@ class AppDrawerActivity : AppCompatActivity() {
     
     private fun loadInstalledApps() {
         val packageManager = packageManager
-        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+        val apps = mutableListOf<AppInfo>()
+        val processedPackages = mutableSetOf<String>()
+        
+        // Method 1: Get apps with LAUNCHER category (most common)
+        val launcherIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
+        val launcherApps = packageManager.queryIntentActivities(launcherIntent, 0)
         
-        val resolveInfos = packageManager.queryIntentActivities(mainIntent, PackageManager.MATCH_DEFAULT_ONLY)
-        val apps = mutableListOf<AppInfo>()
-        
-        for (resolveInfo in resolveInfos) {
+        for (resolveInfo in launcherApps) {
             val activityInfo = resolveInfo.activityInfo
+            val packageName = activityInfo.packageName
             
-            // Skip our own app to avoid recursion
-            if (activityInfo.packageName == packageName) {
+            // Skip our own app and already processed packages
+            if (packageName == this.packageName || processedPackages.contains(packageName)) {
                 continue
             }
             
-            val appInfo = AppInfo(
-                label = resolveInfo.loadLabel(packageManager).toString(),
-                packageName = activityInfo.packageName,
-                activityName = activityInfo.name,
-                icon = resolveInfo.loadIcon(packageManager)
-            )
-            apps.add(appInfo)
+            // Skip system launcher apps that shouldn't be shown
+            if (isSystemLauncher(packageName)) {
+                continue
+            }
+            
+            try {
+                val appInfo = AppInfo(
+                    label = resolveInfo.loadLabel(packageManager).toString(),
+                    packageName = packageName,
+                    activityName = activityInfo.name,
+                    icon = resolveInfo.loadIcon(packageManager)
+                )
+                apps.add(appInfo)
+                processedPackages.add(packageName)
+            } catch (e: Exception) {
+                android.util.Log.w("AppDrawer", "Error loading app info for $packageName", e)
+            }
         }
         
-        // Sort apps alphabetically
-        apps.sortBy { it.label.lowercase() }
+        // Method 2: Get apps from all installed packages (fallback for missed apps)
+        try {
+            val installedPackages = packageManager.getInstalledPackages(PackageManager.GET_ACTIVITIES)
+            
+            for (packageInfo in installedPackages) {
+                val packageName = packageInfo.packageName
+                
+                // Skip already processed packages and our own app
+                if (processedPackages.contains(packageName) || packageName == this.packageName) {
+                    continue
+                }
+                
+                // Check if package has a launch intent
+                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    try {
+                        val applicationInfo = packageInfo.applicationInfo
+                        if (applicationInfo != null) {
+                            val appInfo = AppInfo(
+                                label = applicationInfo.loadLabel(packageManager).toString(),
+                                packageName = packageName,
+                                activityName = launchIntent.component?.className ?: "",
+                                icon = applicationInfo.loadIcon(packageManager)
+                                )
+                            apps.add(appInfo)
+                            processedPackages.add(packageName)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("AppDrawer", "Error loading package info for $packageName", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AppDrawer", "Error getting installed packages", e)
+        }
         
-        appAdapter = AppAdapter(apps) { appInfo ->
+        // Method 3: Look for apps with other categories (Android TV apps, etc.)
+        val tvIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+        }
+        val tvApps = packageManager.queryIntentActivities(tvIntent, 0)
+        
+        for (resolveInfo in tvApps) {
+            val activityInfo = resolveInfo.activityInfo
+            val packageName = activityInfo.packageName
+            
+            if (packageName == this.packageName || processedPackages.contains(packageName)) {
+                continue
+            }
+            
+            try {
+                val appInfo = AppInfo(
+                    label = resolveInfo.loadLabel(packageManager).toString(),
+                    packageName = packageName,
+                    activityName = activityInfo.name,
+                    icon = resolveInfo.loadIcon(packageManager)
+                )
+                apps.add(appInfo)
+                processedPackages.add(packageName)
+            } catch (e: Exception) {
+                android.util.Log.w("AppDrawer", "Error loading TV app info for $packageName", e)
+            }
+        }
+        
+        android.util.Log.d("AppDrawer", "Found ${apps.size} apps total")
+        
+        // Filter out duplicates by package name (keep the first occurrence)
+        val uniqueApps = apps.distinctBy { it.packageName }.toMutableList()
+        android.util.Log.d("AppDrawer", "After deduplication: ${uniqueApps.size} unique apps")
+        
+        // Sort unique apps alphabetically
+        uniqueApps.sortBy { it.label.lowercase() }
+        
+        appAdapter = AppAdapter(uniqueApps) { appInfo ->
             launchApp(appInfo)
         }
         recyclerView.adapter = appAdapter
@@ -84,23 +173,83 @@ class AppDrawerActivity : AppCompatActivity() {
     
     private fun launchApp(appInfo: AppInfo) {
         try {
-            val intent = Intent().apply {
-                setClassName(appInfo.packageName, appInfo.activityName)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            android.util.Log.d("AppDrawer", "Launching app: ${appInfo.label} (${appInfo.packageName})")
+            
+            // Method 1: Try to launch using explicit activity name
+            if (appInfo.activityName.isNotEmpty()) {
+                try {
+                    val intent = Intent().apply {
+                        setClassName(appInfo.packageName, appInfo.activityName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                    finish() // Close app drawer after launching app
+                    return
+                } catch (e: Exception) {
+                    android.util.Log.w("AppDrawer", "Failed to launch ${appInfo.packageName} with explicit activity", e)
+                }
             }
-            startActivity(intent)
-            finish() // Close app drawer after launching app
-        } catch (e: Exception) {
-            // Fallback: try to launch app using package manager
+            
+            // Method 2: Try to launch using package manager's launch intent
             try {
                 val launchIntent = packageManager.getLaunchIntentForPackage(appInfo.packageName)
                 if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     startActivity(launchIntent)
                     finish()
+                    return
                 }
             } catch (e: Exception) {
-                // App launch failed
+                android.util.Log.w("AppDrawer", "Failed to launch ${appInfo.packageName} with launch intent", e)
             }
+            
+            // Method 3: Try to launch main activity with LAUNCHER category
+            try {
+                val mainIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    setPackage(appInfo.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                
+                val resolveInfos = packageManager.queryIntentActivities(mainIntent, 0)
+                if (resolveInfos.isNotEmpty()) {
+                    val activityInfo = resolveInfos[0].activityInfo
+                    mainIntent.setClassName(activityInfo.packageName, activityInfo.name)
+                    startActivity(mainIntent)
+                    finish()
+                    return
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AppDrawer", "Failed to launch ${appInfo.packageName} with main intent", e)
+            }
+            
+            // Method 4: Try Android TV leanback launcher intent
+            try {
+                val tvIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                    setPackage(appInfo.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                
+                val resolveInfos = packageManager.queryIntentActivities(tvIntent, 0)
+                if (resolveInfos.isNotEmpty()) {
+                    val activityInfo = resolveInfos[0].activityInfo
+                    tvIntent.setClassName(activityInfo.packageName, activityInfo.name)
+                    startActivity(tvIntent)
+                    finish()
+                    return
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AppDrawer", "Failed to launch ${appInfo.packageName} with TV intent", e)
+            }
+            
+            // If all methods fail, show error
+            android.util.Log.e("AppDrawer", "Failed to launch app: ${appInfo.label}")
+            android.widget.Toast.makeText(this, "Failed to launch ${appInfo.label}", android.widget.Toast.LENGTH_SHORT).show()
+            
+        } catch (e: Exception) {
+            android.util.Log.e("AppDrawer", "Error launching app: ${appInfo.label}", e)
+            android.widget.Toast.makeText(this, "Error launching ${appInfo.label}", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -113,6 +262,35 @@ class AppDrawerActivity : AppCompatActivity() {
         )
         
         lifecycle.addObserver(usbDetectionManager)
+    }
+    
+    private fun isSystemLauncher(packageName: String): Boolean {
+        // Common system launcher packages that shouldn't appear in app drawer
+        val systemLaunchers = setOf(
+            "com.android.launcher",
+            "com.android.launcher2",
+            "com.android.launcher3",
+            "com.google.android.launcher",
+            "com.samsung.android.launcher",
+            "com.miui.home",
+            "com.huawei.android.launcher",
+            "com.oppo.launcher",
+            "com.oneplus.launcher",
+            "com.sonymobile.home",
+            "com.lge.launcher2",
+            "com.htc.launcher",
+            "com.android.settings", // Settings shouldn't be in app drawer
+            "android" // System android package
+        )
+        
+        return systemLaunchers.contains(packageName) || 
+               packageName.contains("launcher") && packageName.contains("android")
+    }
+    
+    private fun refreshApps() {
+        android.util.Log.d("AppDrawer", "Refreshing app list...")
+        android.widget.Toast.makeText(this, "Refreshing apps...", android.widget.Toast.LENGTH_SHORT).show()
+        loadInstalledApps()
     }
 }
 
