@@ -1,10 +1,18 @@
 package info.thanhtunguet.tvglasses
 
+import android.app.DownloadManager
+import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Context.RECEIVER_NOT_EXPORTED
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -20,12 +28,20 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        private const val UPDATE_DOWNLOAD_URL = "https://github.com/thanhtunguet/tvGlasses/releases/download/latest/app-release.apk"
+        private const val UPDATE_APK_FILE_NAME = "tvglasses-latest.apk"
+    }
 
     private lateinit var repository: ConfigurationRepository
     private lateinit var cameraStreamManager: CameraStreamManager
     private lateinit var usbDetectionManager: UsbDetectionManager
+    private var updateDownloadId: Long = -1L
+    private var isDownloadReceiverRegistered: Boolean = false
     private var currentConfiguration: ConfigurationObject = ConfigurationObject()
     private var skipUnlockOnResume: Boolean = false
     private var isUnlocked: Boolean = false
@@ -35,6 +51,16 @@ class MainActivity : AppCompatActivity() {
     private var hasRequestedPermissions: Boolean = false
     private var hasPromptedForLauncher: Boolean = false
     private var shouldAutoLaunchAfterAuth: Boolean = false
+
+    private val updateDownloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+            val completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            if (completedId == updateDownloadId && completedId != -1L) {
+                handleDownloadComplete(completedId)
+            }
+        }
+    }
     
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -70,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         requireUnlockOnResume = repository.isMainLockRequired()
         cameraStreamManager = CameraStreamManager.getInstance(this)
         setupUsbDetection()
+        registerUpdateReceiver()
 
         val rtspField = findViewById<TextInputEditText>(R.id.editRtspUrl)
         val usernameField = findViewById<TextInputEditText>(R.id.editUsername)
@@ -79,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         val openAppsButton = findViewById<MaterialButton>(R.id.buttonOpenApps)
         val setDefaultLauncherButton = findViewById<MaterialButton>(R.id.buttonSetDefaultLauncher)
         val manageVideosButton = findViewById<MaterialButton>(R.id.buttonManageVideos)
+        val updateButton = findViewById<MaterialButton>(R.id.buttonDownloadUpdate)
         val systemSettingsButton = findViewById<ImageButton>(R.id.buttonOpenSystemSettings)
         val setPasswordButton = findViewById<MaterialButton>(R.id.buttonSetPassword)
         val changePasswordButton = findViewById<MaterialButton>(R.id.buttonChangePassword)
@@ -177,6 +205,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, VideoActivity::class.java))
         }
 
+        updateButton.setOnClickListener {
+            startUpdateDownload()
+        }
+
         setDefaultLauncherButton.setOnClickListener {
             if (isDefaultLauncher()) {
                 // Already set as default launcher, open launcher settings to allow changing
@@ -266,6 +298,10 @@ class MainActivity : AppCompatActivity() {
         passwordDialog = null
         // Stop camera stream when app is destroyed
         cameraStreamManager.stopMaintainingConnection()
+        if (isDownloadReceiverRegistered) {
+            runCatching { unregisterReceiver(updateDownloadReceiver) }
+            isDownloadReceiverRegistered = false
+        }
         super.onDestroy()
     }
 
@@ -582,9 +618,14 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             // Android 12 and below - Use READ_EXTERNAL_STORAGE
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) 
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
                 requiredPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
         }
         
@@ -785,5 +826,135 @@ class MainActivity : AppCompatActivity() {
             checkAndRequestPermissions()
         }
     }
-    
+
+    private fun registerUpdateReceiver() {
+        if (isDownloadReceiverRegistered) return
+        val intentFilter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(updateDownloadReceiver, intentFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(updateDownloadReceiver, intentFilter)
+        }
+        isDownloadReceiverRegistered = true
+    }
+
+    private fun startUpdateDownload() {
+        val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+        if (downloadManager == null) {
+            Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val downloadUri = Uri.parse(UPDATE_DOWNLOAD_URL)
+        clearExistingUpdateFile()
+
+        val request = DownloadManager.Request(downloadUri)
+            .setTitle(getString(R.string.update_download_title))
+            .setDescription(getString(R.string.update_download_description))
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, UPDATE_APK_FILE_NAME)
+
+        try {
+            updateDownloadId = downloadManager.enqueue(request)
+            Toast.makeText(this, R.string.update_download_started, Toast.LENGTH_SHORT).show()
+        } catch (e: IllegalArgumentException) {
+            Log.e("MainActivity", "Unable to enqueue update download", e)
+            Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+        } catch (e: SecurityException) {
+            Log.e("MainActivity", "Security exception while starting update download", e)
+            Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun clearExistingUpdateFile() {
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val existingFile = File(downloadsDir, UPDATE_APK_FILE_NAME)
+        if (existingFile.exists()) {
+            runCatching { existingFile.delete() }
+        }
+    }
+
+    private fun handleDownloadComplete(downloadId: Long) {
+        val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return
+        val query = DownloadManager.Query().setFilterById(downloadId)
+        downloadManager.query(query)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val statusIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
+                val status = cursor.getInt(statusIndex)
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    val downloadUri = downloadManager.getUriForDownloadedFile(downloadId)
+                    if (downloadUri != null) {
+                        Toast.makeText(this, R.string.update_download_complete, Toast.LENGTH_SHORT).show()
+                        attemptInstallUpdate(downloadUri)
+                    } else {
+                        Toast.makeText(this, R.string.update_install_failed, Toast.LENGTH_LONG).show()
+                        openDownloadsFolder(null)
+                    }
+                } else {
+                    Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        updateDownloadId = -1L
+    }
+
+    private fun attemptInstallUpdate(downloadUri: Uri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(this, R.string.update_install_permission_required, Toast.LENGTH_LONG).show()
+            val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            if (settingsIntent.resolveActivity(packageManager) != null) {
+                startActivity(settingsIntent)
+            }
+            openDownloadsFolder(downloadUri)
+            return
+        }
+
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(downloadUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            startActivity(installIntent)
+        } catch (e: ActivityNotFoundException) {
+            Log.e("MainActivity", "No activity found to handle APK install", e)
+            Toast.makeText(this, R.string.update_install_failed, Toast.LENGTH_LONG).show()
+            openDownloadsFolder(downloadUri)
+        } catch (e: SecurityException) {
+            Log.e("MainActivity", "Security exception while starting APK install", e)
+            Toast.makeText(this, R.string.update_install_failed, Toast.LENGTH_LONG).show()
+            openDownloadsFolder(downloadUri)
+        }
+    }
+
+    private fun openDownloadsFolder(downloadUri: Uri?) {
+        val downloadsIntent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (downloadsIntent.resolveActivity(packageManager) != null) {
+            startActivity(downloadsIntent)
+            return
+        }
+
+        if (downloadUri != null) {
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(downloadUri, "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            if (viewIntent.resolveActivity(packageManager) != null) {
+                startActivity(viewIntent)
+                return
+            }
+        }
+
+        Toast.makeText(this, R.string.update_no_file_manager, Toast.LENGTH_LONG).show()
+    }
+
 }
