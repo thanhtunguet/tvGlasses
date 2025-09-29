@@ -39,6 +39,8 @@ class VideoActivity : BasePlaybackActivity() {
     private lateinit var layoutUsbVideos: View
     private lateinit var deleteSelectedButton: MaterialButton
     private lateinit var deleteAllButton: MaterialButton
+    private lateinit var copyFromUsbButton: MaterialButton
+    private lateinit var refreshVideosButton: MaterialButton
     private lateinit var buttonSyncFromUsb: MaterialButton
     private lateinit var videoAdapter: VideoAdapter
     private lateinit var usbVideoAdapter: VideoAdapter
@@ -49,6 +51,8 @@ class VideoActivity : BasePlaybackActivity() {
     private var currentVideos: List<VideoFile> = emptyList()
     private var currentUsbVideos: List<VideoFile> = emptyList()
     private var isUsbConnected = false
+    private var isUsbSyncInProgress = false
+    private var isScanningVideos = false
     
     private val manageStoragePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -101,13 +105,17 @@ class VideoActivity : BasePlaybackActivity() {
         layoutUsbVideos = findViewById(R.id.layoutUsbVideos)
         deleteSelectedButton = findViewById(R.id.buttonDeleteSelected)
         deleteAllButton = findViewById(R.id.buttonDeleteAll)
+        copyFromUsbButton = findViewById(R.id.buttonCopyUsbVideos)
+        refreshVideosButton = findViewById(R.id.buttonRefreshVideos)
         buttonSyncFromUsb = findViewById(R.id.buttonSyncFromUsb)
     }
 
     private fun setupDeleteButtons() {
         deleteSelectedButton.setOnClickListener { confirmDeleteSelected() }
         deleteAllButton.setOnClickListener { confirmDeleteAll() }
+        copyFromUsbButton.setOnClickListener { syncAllVideosFromUsb() }
         buttonSyncFromUsb.setOnClickListener { syncAllVideosFromUsb() }
+        refreshVideosButton.setOnClickListener { refreshVideoLists() }
         updateSelectionUi()
     }
 
@@ -145,6 +153,10 @@ class VideoActivity : BasePlaybackActivity() {
         }
     }
 
+    private fun refreshVideoLists() {
+        scanForVideos(force = true)
+    }
+
     private fun setupVideoScanner() {
         videoScanner = VideoFileScanner(this)
     }
@@ -170,6 +182,11 @@ class VideoActivity : BasePlaybackActivity() {
     private fun updateUsbVisibility(hasUsb: Boolean) {
         isUsbConnected = hasUsb
         layoutUsbVideos.visibility = if (hasUsb) View.VISIBLE else View.GONE
+        copyFromUsbButton.visibility = View.VISIBLE
+        copyFromUsbButton.isEnabled = hasUsb && currentUsbVideos.isNotEmpty() && !isUsbSyncInProgress && !isScanningVideos
+        if (!hasUsb && !isUsbSyncInProgress) {
+            copyFromUsbButton.text = getString(R.string.button_copy_usb_videos)
+        }
     }
     
     private fun scanForUsbVideos() {
@@ -199,8 +216,11 @@ class VideoActivity : BasePlaybackActivity() {
     }
     
     private fun syncAllVideosFromUsb() {
+        if (isUsbSyncInProgress) {
+            return
+        }
         if (currentUsbVideos.isEmpty()) {
-            Toast.makeText(this, "No videos found on USB storage", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.usb_no_videos, Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -209,20 +229,28 @@ class VideoActivity : BasePlaybackActivity() {
         } else {
             currentUsbVideos
         }
+
+        if (videosToSync.isEmpty()) {
+            Toast.makeText(this, R.string.usb_no_videos, Toast.LENGTH_SHORT).show()
+            return
+        }
         
         MaterialAlertDialogBuilder(this)
-            .setTitle("Sync Videos from USB")
-            .setMessage("Sync ${videosToSync.size} video(s) from USB to internal storage?")
-            .setPositiveButton("Sync") { _, _ ->
+            .setTitle(R.string.usb_sync_dialog_title)
+            .setMessage(getString(R.string.usb_sync_dialog_message, videosToSync.size))
+            .setPositiveButton(R.string.usb_sync_dialog_action) { _, _ ->
                 performUsbSync(videosToSync)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
     
     private fun performUsbSync(videosToSync: List<VideoFile>) {
+        isUsbSyncInProgress = true
         buttonSyncFromUsb.isEnabled = false
-        buttonSyncFromUsb.text = "Syncing..."
+        buttonSyncFromUsb.text = getString(R.string.button_sync_usb_syncing)
+        copyFromUsbButton.isEnabled = false
+        copyFromUsbButton.text = getString(R.string.button_copy_usb_syncing)
         
         lifecycleScope.launch {
             var successCount = 0
@@ -246,15 +274,18 @@ class VideoActivity : BasePlaybackActivity() {
             }
             
             val message = if (failCount == 0) {
-                "Successfully synced $successCount video(s)"
+                getString(R.string.usb_sync_success, successCount)
             } else {
-                "Synced $successCount video(s), failed $failCount"
+                getString(R.string.usb_sync_partial, successCount, failCount)
             }
             
             Toast.makeText(this@VideoActivity, message, Toast.LENGTH_LONG).show()
             
+            isUsbSyncInProgress = false
             buttonSyncFromUsb.isEnabled = true
-            buttonSyncFromUsb.text = "Sync All"
+            copyFromUsbButton.isEnabled = isUsbConnected && currentUsbVideos.isNotEmpty() && !isScanningVideos
+            copyFromUsbButton.text = getString(R.string.button_copy_usb_videos)
+            updateSelectionUi()
             
             // Refresh local videos to show newly synced content
             if (successCount > 0) {
@@ -263,7 +294,21 @@ class VideoActivity : BasePlaybackActivity() {
         }
     }
 
-    private fun scanForVideos() {
+    private fun scanForVideos(force: Boolean = false) {
+        if (isScanningVideos) {
+            if (!force) {
+                return
+            }
+            Toast.makeText(this, getString(R.string.video_scanning), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isScanningVideos = true
+        refreshVideosButton.isEnabled = false
+        refreshVideosButton.text = getString(R.string.button_refresh_videos_loading)
+        if (!isUsbSyncInProgress) {
+            copyFromUsbButton.isEnabled = false
+        }
         showScanningState()
         
         lifecycleScope.launch {
@@ -283,6 +328,11 @@ class VideoActivity : BasePlaybackActivity() {
             } catch (e: Exception) {
                 android.util.Log.e("VideoActivity", "Error scanning videos", e)
                 showEmptyState()
+            } finally {
+                isScanningVideos = false
+                refreshVideosButton.isEnabled = !isUsbSyncInProgress
+                refreshVideosButton.text = getString(R.string.button_refresh_videos)
+                updateSelectionUi()
             }
         }
     }
@@ -360,16 +410,30 @@ class VideoActivity : BasePlaybackActivity() {
             getString(R.string.video_delete_all)
         }
 
-        // Update sync button text
+        // Update sync button state
         if (isUsbConnected) {
-            buttonSyncFromUsb.text = if (selectedUsbCount > 0) {
-                "Sync Selected ($selectedUsbCount)"
-            } else if (totalUsbCount > 0) {
-                "Sync All ($totalUsbCount)"
-            } else {
-                "Sync All"
+            if (!isUsbSyncInProgress) {
+                buttonSyncFromUsb.text = when {
+                    selectedUsbCount > 0 -> getString(R.string.button_sync_usb_selected_with_count, selectedUsbCount)
+                    totalUsbCount > 0 -> getString(R.string.button_sync_usb_all_with_count, totalUsbCount)
+                    else -> getString(R.string.button_sync_usb_all)
+                }
+                copyFromUsbButton.text = getString(R.string.button_copy_usb_videos)
             }
-            buttonSyncFromUsb.isEnabled = totalUsbCount > 0
+            buttonSyncFromUsb.isEnabled = !isUsbSyncInProgress && !isScanningVideos && totalUsbCount > 0
+            copyFromUsbButton.isEnabled = !isUsbSyncInProgress && !isScanningVideos && totalUsbCount > 0
+        } else {
+            if (!isUsbSyncInProgress) {
+                buttonSyncFromUsb.text = getString(R.string.button_sync_usb_all)
+                copyFromUsbButton.text = getString(R.string.button_copy_usb_videos)
+            }
+            buttonSyncFromUsb.isEnabled = false
+            copyFromUsbButton.isEnabled = false
+        }
+
+        refreshVideosButton.isEnabled = !isScanningVideos && !isUsbSyncInProgress
+        if (!isScanningVideos) {
+            refreshVideosButton.text = getString(R.string.button_refresh_videos)
         }
 
         videoAdapter.updateSelection(selectedVideoPaths)
